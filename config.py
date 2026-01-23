@@ -274,7 +274,7 @@ def host_platform(opts):
     opts['HOST_PLATFORM'] = guess_platform()
 
 def guess_xcode_arch(target_sdk):
-    sdk, ver = re.match('^([^\d]*)(\d*)', target_sdk).groups()
+    sdk, ver = re.match(r'^([^\d]*)(\d*)', target_sdk).groups()
     if sdk == 'macosx':
         return 'x86_64'
     if sdk == 'iphoneos':
