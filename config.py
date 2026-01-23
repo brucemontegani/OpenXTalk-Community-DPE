@@ -30,17 +30,18 @@ BUILDBOT_PLATFORM_TRIPLES = (
     'arm64-android-ndk16r15',
     'x86-android-ndk16r15',
     'x86_64-android-ndk16r15',
-    'universal-mac-macosx10.9', # Minimum deployment target
-    'universal-ios-iphoneos14.5',
-    'universal-ios-iphoneos14.4',
-    'universal-ios-iphoneos13.2',
-    'universal-ios-iphoneos12.1',
-    'universal-ios-iphoneos11.2',
-    'universal-ios-iphonesimulator14.5',
-    'universal-ios-iphonesimulator14.4',
-    'universal-ios-iphonesimulator13.2',
-    'universal-ios-iphonesimulator12.1',
-    'universal-ios-iphonesimulator11.2',
+    # Modern platforms - supporting last 3-4 OS versions with security updates
+    'universal-mac-macosx11.0',     # macOS 11 Big Sur - first with Apple Silicon
+    'universal-mac-macosx12.0',     # macOS 12 Monterey
+    'universal-mac-macosx13.0',     # macOS 13 Ventura
+    'universal-mac-macosx14.0',     # macOS 14 Sonoma
+    'universal-mac-macosx15.0',     # macOS 15 Sequoia
+    'universal-ios-iphoneos16.0',   # iOS 16 (arm64 only)
+    'universal-ios-iphoneos17.0',   # iOS 17
+    'universal-ios-iphoneos18.0',   # iOS 18
+    'universal-ios-iphonesimulator16.0',
+    'universal-ios-iphonesimulator17.0',
+    'universal-ios-iphonesimulator18.0',
     'x86-win32', # TODO[2017-03-23] More specific ABI
     'x86_64-win32',
     'js-emscripten-sdk1.35',
@@ -275,15 +276,23 @@ def host_platform(opts):
 
 def guess_xcode_arch(target_sdk):
     sdk, ver = re.match(r'^([^\d]*)(\d*)', target_sdk).groups()
+    
     if sdk == 'macosx':
-        return 'x86_64'
+        # Auto-detect Mac architecture (Apple Silicon vs Intel)
+        # macOS 11+ supports both arm64 (Apple Silicon) and x86_64 (Intel)
+        import platform
+        return 'arm64' if platform.machine() == 'arm64' else 'x86_64'
+    
     if sdk == 'iphoneos':
-        if int(ver) < 8:
-            return 'armv7'
-        else:
-            return 'armv7 arm64'
+        # iOS 14+ is arm64 only (drops 32-bit armv7)
+        # This covers the last 3-4 iOS versions with security support
+        return 'arm64'
+    
     if sdk == 'iphonesimulator':
-        return 'x86_64'
+        # iPhone Simulator uses host Mac architecture
+        # arm64 for Apple Silicon, x86_64 for Intel
+        import platform
+        return 'arm64' if platform.machine() == 'arm64' else 'x86_64'
 
 def validate_target_arch(opts):
     if opts['TARGET_ARCH'] is None:
@@ -499,7 +508,7 @@ def validate_xcode_sdks(opts):
     if opts['XCODE_TARGET_SDK'] is None:
         validate_os(opts)
         if opts['OS'] == 'mac':
-            opts['XCODE_TARGET_SDK'] = 'macosx10.9'
+            opts['XCODE_TARGET_SDK'] = 'macosx11.0'  # macOS 11+ supports Universal binaries (Intel + Apple Silicon)
         elif opts['OS'] == 'ios':
             opts['XCODE_TARGET_SDK'] = 'iphoneos'
 
@@ -801,9 +810,14 @@ def configure_mac(opts):
     host_platform(opts)
     validate_target_arch(opts)
     validate_xcode_sdks(opts)
-    validate_java_tools(opts)
+    # validate_java_tools(opts)  # Java not required for Mac/iOS builds
+    
+    # Set dummy JAVA_SDK if not present (gyp expects it but doesn't use it for Mac)
+    if opts['JAVA_SDK'] is None:
+        opts['JAVA_SDK'] = '/tmp'
+    
     copy_workspace_settings(opts)
-
+    
     args = core_gyp_args(opts) + ['-Dtarget_sdk=' + opts['XCODE_TARGET_SDK'],
                                   '-Dhost_sdk=' + opts['XCODE_HOST_SDK'],
                                   '-Dtarget_arch=' + opts['TARGET_ARCH'],
