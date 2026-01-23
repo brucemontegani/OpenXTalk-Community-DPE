@@ -68,6 +68,30 @@ clean-linux:
 	rm -rf prebuilt/lib
 	find . -name \*.lcb | xargs touch
 
+clean-mac:
+	rm -rf mac-*-bin
+	rm -rf build-mac
+	rm -rf _cache/mac
+	rm -rf prebuilt/fetched
+	rm -rf prebuilt/include
+	rm -rf prebuilt/lib
+	find . -name \*.lcb | xargs touch
+
+clean-ios:
+	rm -rf ios-*-bin
+	rm -rf build-ios-*
+	rm -rf _cache/ios
+	rm -rf prebuilt/fetched
+	rm -rf prebuilt/include
+	rm -rf prebuilt/lib
+	find . -name \*.lcb | xargs touch
+
+clean-all: clean-linux clean-mac clean-ios
+	rm -rf _build
+	@echo "All build artifacts cleaned"
+
+clean: clean-all
+
 check-common-%:
 ifneq ($(TRAVIS),undefined)
 	@echo "travis_fold:start:testengine"
