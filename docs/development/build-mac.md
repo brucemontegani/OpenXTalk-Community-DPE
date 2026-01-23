@@ -1,98 +1,238 @@
-# Compiling for Mac OS X and iOS
+# Compiling for macOS and iOS
 
-![LiveCode Community Logo](http://livecode.com/wp-content/uploads/2015/02/livecode-logo.png)
+![OpenXTalk Community Logo](http://livecode.com/wp-content/uploads/2015/02/livecode-logo.png)
 
-Copyright © 2015-2016 LiveCode Ltd., Edinburgh, UK
+Copyright © 2015-2024 LiveCode Ltd., Edinburgh, UK
+Copyright © 2024-2026 OpenXTalk Community
 
-## Dependencies
+## Overview
 
-### Required dependencies
+OpenXTalk can be built for macOS (Intel and Apple Silicon) and iOS devices and simulators. This guide covers the requirements and build process for both platforms.
 
-You must install Xcode.  This will allow you to build LiveCode for:
+## System Requirements
 
-* iPhone OS
-* iPhoneSimulator
+### Required Software
 
-You will not be able to compile the OS X desktop version of unless you install some older OS X SDKs; see the next section for details.
-
-### Optional dependencies
-
-By default, OXT is compiled for a large number of versions of iPhoneSimulator, and requires quite a lot of Apple SDKs to be installed.
-
-Create a directory on your hard disk (say, `/Applications/Xcode-Dev/`).
-
-Download and install each of the following versions of Xcode, placing their app bundles into the specified paths:
-
-| Xcode version | App path                                |
-| ------------- | --------------------------------------- |
-| 8.3           | /Applications/Xcode-Dev/Xcode_8_3.app   |
-| 8.2           | /Applications/Xcode-Dev/Xcode_8_2.app   |
-| 7.2.1         | /Applications/Xcode-Dev/Xcode_7_2_1.app |
-| 6.2 [1]       | /Applications/Xcode-Dev/Xcode_6_2.app   |
-
-Notes:
-1. Required for OS X build
-
-Make sure you run and verify each of the versions of Xcode. Download and install any extra SDKs you need using the "Xcode → Preferences → Downloads" window.
-
-Make `/Applications/Xcode-Dev/Xcode.app` a symlink to the latest version of Xcode available.  For example, run:
+- **macOS**: macOS 13 (Ventura) or later
+- **Xcode**: Xcode 14 or later (latest version recommended)
+  - Install from the Mac App Store or [developer.apple.com](https://developer.apple.com/xcode/)
+- **Command Line Tools**: Installed automatically with Xcode, or run:
+```bash
+  xcode-select --install
 ```
-    cd /Applications/Xcode-Dev
-    ln -s Xcode_V_V_V.app Xcode.app
+- **Python**: Python 2.7 (via pyenv) or Python 3.x
+  - The build system has been updated to work with Python 3
+- **Git**: For cloning the repository and managing submodules
+
+### Supported Target Platforms
+
+- **macOS**: 11.0 (Big Sur) or later
+  - Universal binaries supported (Intel x86_64 + Apple Silicon arm64)
+- **iOS**: 16.0 or later
+  - arm64 only (modern iPhones and iPads)
+- **iOS Simulator**: Runs on your Mac's native architecture
+  - arm64 on Apple Silicon Macs
+  - x86_64 on Intel Macs
+
+## Getting Started
+
+### 1. Clone the Repository
+```bash
+git clone --recursive https://github.com/OpenXTalk-org/OpenXTalk-Community-DPE.git
+cd OpenXTalk-Community-DPE
 ```
-Where `Xcode_V_V_V.app` is the latest version of Xcode that you have installed on your machine.
 
-Before proceeding to the next step, make sure to run Xcode at least once and get to the starting screen. Not doing this might break your Xcode installation and result in an error complaining that it ***could not find the default platform***
-
-After checking out the OXT git repository, you need to run a tool to finalize the Xcode setup and to make sure all of the necessary SDKs are installed.  If OXT is checked out to `~/git/livecode`, run:
+If you've already cloned without `--recursive`, initialize the submodules:
+```bash
+git submodule update --init --recursive
 ```
-    cd /Applications/Xcode-Dev/
-    sh ~/git/livecode/tools/setup_xcode_sdks.sh
+
+### 2. Install Python 2.7 (if needed)
+
+Some legacy build scripts still require Python 2.7. Install it using pyenv:
+```bash
+# Install pyenv
+brew install pyenv
+
+# Install Python 2.7
+pyenv install 2.7.18
+
+# Set it for this directory only
+pyenv local 2.7.18
 ```
-If you want the setup tool to copy the required SDKs out of the Xcode
-app bundles (so that you can safely delete all but the latest Xcode to
-save disk space), you can run:
+
+Alternatively, the build system supports Python 3.x for most operations.
+
+## Building for macOS
+
+### Quick Start
+```bash
+# Configure the build (generates Xcode project files)
+make config-mac
+
+# Compile (Debug build)
+make compile-mac
+
+# Or compile Release build (optimized)
+MODE=release make compile-mac
 ```
-    sh ~/git/livecode/tools/setup_xcode_sdks.sh --cache
+
+### Build Configurations
+
+- **Debug**: Full debugging symbols, no optimization (default)
+```bash
+  MODE=debug make compile-mac
 ```
-## Configuring
+  
+- **Release**: Optimized for performance, stripped symbols
+```bash
+  MODE=release make compile-mac
+```
+  
+- **Fast**: Optimized with some debug information
+```bash
+  MODE=fast make compile-mac
+```
 
-### Build environment
+### Using Xcode (Optional)
 
-If you have installed the `Xcode.app` to a non-standard location, or you wish to switch between multiple versions of Xcode, you will need to set the `XCODEBUILD` environment variable.  For example:
+After running `make config-mac`, you can open the generated Xcode project:
+```bash
+open build-mac/livecode/livecode.xcodeproj
+```
 
-    export XCODEBUILD=/Applications/Xcode-Dev/Xcode.app/Contents/Developer/usr/bin/xcodebuild
+Then build using Xcode's standard build commands (⌘B).
 
-### Generating Xcode project files
+### Architecture Notes
 
-To generate Xcode project files for OS X desktop builds, run:
+The build system automatically detects your Mac's architecture:
+- **Apple Silicon Macs**: Builds arm64 binaries by default
+- **Intel Macs**: Builds x86_64 binaries by default
 
-    make config-mac
+To build a universal binary (both architectures), modify the build configuration or use Xcode's architecture settings.
 
-This will generate project files in the `build-mac` directory.  You can open and use these in Xcode.
+## Building for iOS
 
-To generate Xcode project files for iOS, run:
+### Configure for iOS
+```bash
+# Configure for iOS device (latest supported version)
+make config-ios-iphoneos
 
-    make config-ios
+# Or for iOS Simulator
+make config-ios-iphonesimulator
+```
 
-This will generate several build directories with Xcode project files: one for each version of iPhoneOS or iPhoneSimulator.
+### Compile for iOS
+```bash
+# Build for iOS device
+make compile-ios-iphoneos
 
-If you want to just build for the newest supported version of the iPhoneOS SDK, you can simply run:
+# Build for iOS Simulator
+make compile-ios-iphonesimulator
+```
 
-    make config-ios-iphoneos
+### iOS Requirements
 
-To provide detailed configuration options, you can use the `config.sh` script.  For more information, run:
+- **Apple Developer Account**: Required for deploying to physical devices
+- **Code Signing**: Configure in Xcode project settings
+- **Provisioning Profiles**: Set up in Xcode or Apple Developer portal
 
-    ./config.sh --help
+### Supported iOS Versions
 
-## Compiling
+OpenXTalk supports:
+- iOS 16.0 and later
+- arm64 architecture only
 
-You can open the generated project files in Xcode and compile from there using the normal Xcode build procedure.
+This covers devices receiving current security updates from Apple.
 
-You can also compile the engine from the command line using make, for example:
+## Engine Flavors
 
-    make compile-mac
+OpenXTalk builds several engine variants for different purposes:
 
-The same applies for the iPhoneOS and iPhoneSimulator builds.  For example, you can compile for the newest supported version of the iPhoneSimulator SDK using:
+1. **Development Engine**: Used to run the IDE
+   - Target: `development`
+   - Contains IDE-specific features
 
-    make compile-ios-iphonesimulator
+2. **Standalone Engine**: Embedded in compiled applications
+   - Target: `standalone`
+   - Optimized, minimal dependencies
+
+3. **Server Engine**: For headless/server contexts
+   - Target: `server`
+   - No GUI dependencies
+
+4. **Installer Engine**: Used to create the OpenXTalk installer
+   - Target: `installer`
+   - Archive and installation utilities
+
+## Cleaning Build Artifacts
+```bash
+# Clean macOS builds
+make clean-mac
+
+# Clean iOS builds
+make clean-ios
+
+# Clean everything
+make clean-all
+```
+
+## Troubleshooting
+
+### "Command not found" Errors
+
+If you see errors about missing commands:
+- Ensure Xcode Command Line Tools are installed: `xcode-select --install`
+- Verify Python is available: `python --version` or `python3 --version`
+
+### Xcode Version Issues
+
+If you have multiple Xcode versions installed, set the active one:
+```bash
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+```
+
+### Submodule Issues
+
+If builds fail with missing files, ensure submodules are initialized:
+```bash
+git submodule update --init --recursive --force
+```
+
+### Architecture Mismatch
+
+The build system auto-detects your Mac's architecture. If you need to override:
+```bash
+TARGET_ARCH=arm64 make config-mac  # Force arm64
+TARGET_ARCH=x86_64 make config-mac # Force x86_64
+```
+
+## Advanced Configuration
+
+For detailed configuration options:
+```bash
+./config.sh --help
+```
+
+You can customize:
+- Target architectures
+- SDK versions
+- Build options
+- Feature flags
+
+## Additional Resources
+
+- [OpenXTalk Forums](https://forums.openxtalk.org/)
+- [Contributing Guide](../../CONTRIBUTING.md)
+- [Build System Overview](../development/)
+
+## Legacy Support
+
+This documentation covers modern build requirements (macOS 11+, iOS 16+). 
+
+For building with older SDKs or architectures, refer to:
+- Legacy LiveCode documentation
+- Older commits in the repository history
+- Community forums for archived build instructions
+
+Note: Older OS versions no longer receive security updates from Apple and are not recommended for production use.
