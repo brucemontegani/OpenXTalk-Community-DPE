@@ -508,7 +508,17 @@ def validate_xcode_sdks(opts):
     if opts['XCODE_TARGET_SDK'] is None:
         validate_os(opts)
         if opts['OS'] == 'mac':
-            opts['XCODE_TARGET_SDK'] = 'macosx11.0'  # macOS 11+ supports Universal binaries (Intel + Apple Silicon)
+            # Auto-detect latest available macOS SDK
+            import subprocess
+            try:
+                sdks = subprocess.check_output(['xcodebuild', '-showsdks']).decode('utf-8')
+                macosx_sdks = [line.split()[-1] for line in sdks.split('\n') if 'macosx' in line.lower()]
+                if macosx_sdks:
+                    opts['XCODE_TARGET_SDK'] = macosx_sdks[-1]  # Use latest
+                else:
+                    opts['XCODE_TARGET_SDK'] = 'macosx'  # Fallback to latest
+            except:
+                opts['XCODE_TARGET_SDK'] = 'macosx'  # Fallback
         elif opts['OS'] == 'ios':
             opts['XCODE_TARGET_SDK'] = 'iphoneos'
 
@@ -810,18 +820,62 @@ def configure_mac(opts):
     host_platform(opts)
     validate_target_arch(opts)
     validate_xcode_sdks(opts)
-    # validate_java_tools(opts)  # Java not required for Mac/iOS builds
     
-    # Set dummy JAVA_SDK if not present (gyp expects it but doesn't use it for Mac)
+    # Auto-detect available SDK
+    import subprocess
+    try:
+        sdks_output = subprocess.check_output(['xcodebuild', '-showsdks']).decode('utf-8')
+        macosx_sdks = [line.split()[-1] for line in sdks_output.split('\n') 
+                       if 'macosx' in line.lower()]
+        if macosx_sdks:
+            opts['XCODE_TARGET_SDK'] = macosx_sdks[-1]
+            opts['XCODE_HOST_SDK'] = macosx_sdks[-1]
+    except:
+        opts['XCODE_TARGET_SDK'] = 'macosx'
+        opts['XCODE_HOST_SDK'] = 'macosx'
+    
+    # Check for universal build request
+    universal_build = os.environ.get('UNIVERSAL_BUILD', '0') == '1'
+    
+    if universal_build:
+        # Override architecture detection for universal builds
+        opts['TARGET_ARCH'] = 'x86_64 arm64'
+        print("Configuring for Universal Binary (x86_64 + arm64)")
+    elif opts['TARGET_ARCH'] is None:
+        # Auto-detect for single architecture (existing logic)
+        import platform
+        machine = platform.machine()
+        opts['TARGET_ARCH'] = 'arm64' if machine == 'arm64' else 'x86_64'
+        print(f"Configuring for {opts['TARGET_ARCH']}")
+    
+    # Set minimum deployment target - minimum macOS version to run on
+    if 'MIN_MACOSX_VERSION' not in os.environ:
+        opts['MIN_MACOSX_VERSION'] = '13.0'
+    
+    # Apple's build system expects MACOSX_DEPLOYMENT_TARGET
+    opts['MACOSX_DEPLOYMENT_TARGET'] = opts['MIN_MACOSX_VERSION']
+
+    # Set deployment target
+    if 'MACOSX_DEPLOYMENT_TARGET' not in opts or opts['MACOSX_DEPLOYMENT_TARGET'] is None:
+        opts['MACOSX_DEPLOYMENT_TARGET'] = '13.0'
+    
+    # Set dummy JAVA_SDK for gyp (not used in Mac builds, but referenced in gyp files)
     if opts['JAVA_SDK'] is None:
         opts['JAVA_SDK'] = '/tmp'
-    
+
     copy_workspace_settings(opts)
     
-    args = core_gyp_args(opts) + ['-Dtarget_sdk=' + opts['XCODE_TARGET_SDK'],
-                                  '-Dhost_sdk=' + opts['XCODE_HOST_SDK'],
-                                  '-Dtarget_arch=' + opts['TARGET_ARCH'],
-                                  '-Djavahome=' + opts['JAVA_SDK']]
+    args = core_gyp_args(opts) + [
+        '-Dtarget_sdk=' + opts['XCODE_TARGET_SDK'],
+        '-Dhost_sdk=' + opts['XCODE_HOST_SDK'],
+        '-Dtarget_arch=' + opts['TARGET_ARCH'],
+        '-Djavahome=' + opts['JAVA_SDK']  # Required by gyp even though not used
+    ]
+    
+    # Pass deployment target to build system
+    if 'MACOSX_DEPLOYMENT_TARGET' in opts and opts['MACOSX_DEPLOYMENT_TARGET'] is not None:
+        os.environ['MACOSX_DEPLOYMENT_TARGET'] = opts['MACOSX_DEPLOYMENT_TARGET']
+    
     exec_gyp(args + opts['GYP_OPTIONS'])
 
 def configure_ios(opts):
