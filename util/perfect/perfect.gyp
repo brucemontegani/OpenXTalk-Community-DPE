@@ -42,12 +42,12 @@
 							'SDKROOT': '<(host_sdk)',
 						},
 					],
-                    [
-                        'OS == "mac" and target_sdk != "macosx10.6"',
-                        {
-                            'ARCHS': '<(host_arch)',
-                        },
-                    ],
+                    # [
+                    #     'OS == "mac" and target_sdk != "macosx10.6"',
+                    #     {
+                    #         'ARCHS': '<(host_arch)',
+                    #     },
+                    # ],
 					[
 						# FIXME Force the perfect executable to be put into
 						# the target SDK's output directory, so that it
