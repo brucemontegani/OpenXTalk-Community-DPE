@@ -178,7 +178,6 @@ $(addsuffix -android,all config compile check): %: %-armv6
 ################################################################
 # Mac rules
 ################################################################
-
 config-mac:
 ifneq ($(TRAVIS),undefined)
 	@echo "travis_fold:start:config"
@@ -188,7 +187,12 @@ endif
 ifneq ($(TRAVIS),undefined)
 	@echo "travis_fold:end:config"
 endif
-	
+
+# Universal binary configuration
+config-mac-universal:
+	@echo "Configuring for Universal Binary (Intel + Apple Silicon)"
+	UNIVERSAL_BUILD=1 $(MAKE) config-mac
+
 compile-mac:
 ifneq ($(TRAVIS),undefined)
 	@echo "travis_fold:start:compile"
@@ -199,7 +203,12 @@ endif
 ifneq ($(TRAVIS),undefined)
 	@echo "travis_fold:end:compile"
 endif
-	  
+
+# Universal binary build
+compile-mac-universal: config-mac-universal
+	@echo "Building Universal Binary"
+	$(MAKE) compile-mac
+
 check-mac:
 ifneq ($(TRAVIS),undefined)
 	@echo "travis_fold:start:testcpp"
@@ -216,6 +225,11 @@ endif
 all-mac:
 	$(MAKE) config-mac
 	$(MAKE) compile-mac
+
+all-mac-universal:
+	$(MAKE) config-mac-universal
+	$(MAKE) compile-mac-universal
+
 
 ################################################################
 # iOS rules
