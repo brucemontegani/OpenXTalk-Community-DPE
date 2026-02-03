@@ -82,7 +82,7 @@ set(OPENXTALK_PREBUILT_SHARE_DIR "${OPENXTALK_PREBUILT_DIR}/share")
 
 # Function to configure a macOS application target
 function(openxtalk_configure_macos_app TARGET_NAME)
-    cmake_parse_arguments(ARG "SERVER" "BUNDLE_ID;BUNDLE_NAME" "FRAMEWORKS" ${ARGN})
+    cmake_parse_arguments(ARG "SERVER" "BUNDLE_ID;BUNDLE_NAME;INFO_PLIST" "FRAMEWORKS;ICONS;RESOURCES" ${ARGN})
 
     # Set bundle properties
     set_target_properties(${TARGET_NAME} PROPERTIES
@@ -93,6 +93,36 @@ function(openxtalk_configure_macos_app TARGET_NAME)
         MACOSX_BUNDLE_GUI_IDENTIFIER "${ARG_BUNDLE_ID}"
         XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${ARG_BUNDLE_ID}"
     )
+
+    # Use custom Info.plist if provided
+    if(ARG_INFO_PLIST AND EXISTS "${ARG_INFO_PLIST}")
+        set_target_properties(${TARGET_NAME} PROPERTIES
+            XCODE_ATTRIBUTE_INFOPLIST_FILE "${ARG_INFO_PLIST}"
+        )
+    endif()
+
+    # Add icon and resource files to the bundle's Resources directory
+    set(_ALL_RESOURCES "")
+    if(ARG_ICONS)
+        list(APPEND _ALL_RESOURCES ${ARG_ICONS})
+    endif()
+    if(ARG_RESOURCES)
+        list(APPEND _ALL_RESOURCES ${ARG_RESOURCES})
+    endif()
+    if(_ALL_RESOURCES)
+        target_sources(${TARGET_NAME} PRIVATE ${_ALL_RESOURCES})
+        set_source_files_properties(${_ALL_RESOURCES} PROPERTIES
+            MACOSX_PACKAGE_LOCATION Resources
+        )
+        # Prevent Xcode from running ResMerger on .rsrc files - treat as plain data
+        foreach(_RES ${_ALL_RESOURCES})
+            if(_RES MATCHES "\\.rsrc$")
+                set_source_files_properties(${_RES} PROPERTIES
+                    XCODE_EXPLICIT_FILE_TYPE "compiled"
+                )
+            endif()
+        endforeach()
+    endif()
 
     # Apply server definitions if needed
     if(ARG_SERVER)

@@ -385,6 +385,28 @@ target_link_libraries(kernel
 )
 
 # ============================================================================
+# macOS app bundle resources (shared by development and standalone targets)
+# ============================================================================
+if(APPLE AND NOT IOS)
+    set(ENGINE_RSRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/rsrc")
+
+    # Localization resources - each .lproj file goes into Resources/<lang>.lproj/
+    file(GLOB ENGINE_LPROJ_DIRS "${ENGINE_RSRC_DIR}/*.lproj")
+    set(ENGINE_LOCALIZATION_RESOURCES)
+    foreach(LPROJ_DIR ${ENGINE_LPROJ_DIRS})
+        file(GLOB LPROJ_FILES "${LPROJ_DIR}/*")
+        list(APPEND ENGINE_LOCALIZATION_RESOURCES ${LPROJ_FILES})
+    endforeach()
+    foreach(LPROJ_FILE ${ENGINE_LOCALIZATION_RESOURCES})
+        get_filename_component(LPROJ_PARENT "${LPROJ_FILE}" DIRECTORY)
+        get_filename_component(LPROJ_NAME "${LPROJ_PARENT}" NAME)
+        set_source_files_properties("${LPROJ_FILE}" PROPERTIES
+            MACOSX_PACKAGE_LOCATION "Resources/${LPROJ_NAME}"
+        )
+    endforeach()
+endif()
+
+# ============================================================================
 # Engine variants
 # ============================================================================
 
@@ -511,9 +533,18 @@ if(BUILD_IDE AND NOT IOS AND NOT ANDROID)
         set_target_properties(development PROPERTIES
             OUTPUT_NAME "LiveCode-Community"
         )
+
         openxtalk_configure_macos_app(development
             BUNDLE_ID "org.openxtalk.development"
             BUNDLE_NAME "LiveCode-Community"
+            INFO_PLIST "${ENGINE_RSRC_DIR}/LiveCode-Info.plist"
+            ICONS
+                "${ENGINE_RSRC_DIR}/LiveCode.icns"
+                "${ENGINE_RSRC_DIR}/LiveCodeDoc.icns"
+            RESOURCES
+                "${ENGINE_RSRC_DIR}/LiveCode-Community.rsrc"
+                "${ENGINE_RSRC_DIR}/terminology.sdef"
+                ${ENGINE_LOCALIZATION_RESOURCES}
             FRAMEWORKS ${OPENXTALK_MACOS_FRAMEWORKS}
         )
     endif()
@@ -546,6 +577,13 @@ if(BUILD_STANDALONE)
         openxtalk_configure_macos_app(standalone
             BUNDLE_ID "org.openxtalk.standalone"
             BUNDLE_NAME "Standalone-Community"
+            INFO_PLIST "${ENGINE_RSRC_DIR}/Standalone-Info.plist"
+            ICONS
+                "${ENGINE_RSRC_DIR}/Standalone.icns"
+                "${ENGINE_RSRC_DIR}/StandaloneDoc.icns"
+            RESOURCES
+                "${ENGINE_RSRC_DIR}/LiveCode-Community.rsrc"
+                ${ENGINE_LOCALIZATION_RESOURCES}
             FRAMEWORKS ${OPENXTALK_MACOS_FRAMEWORKS}
         )
     endif()
