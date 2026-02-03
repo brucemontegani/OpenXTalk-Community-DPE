@@ -380,6 +380,20 @@ if(NOT EXISTS "${ENCODEDERRORS_SRC}")
     endif()
 endif()
 
+# Mode-dependent files needed by ALL engine targets (development, standalone, server, installer)
+# In GYP, kernel-mode-template.gypi adds these to every mode target
+set(ENGINE_MODE_DEPENDENT_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/lextable.cpp
+)
+# encodederrors.cpp provides MCexecutionerrors/MCparsingerrors with real error strings.
+# Standalone and installer modes define their own empty stubs in their mode_*.cpp files,
+# so encodederrors.cpp must NOT be added to those targets (the GYP standalone build
+# explicitly excludes it via sources!). Development and server modes need it.
+set(ENGINE_ENCODEDERRORS_FILE)
+if(EXISTS "${ENCODEDERRORS_SRC}")
+    set(ENGINE_ENCODEDERRORS_FILE "${ENCODEDERRORS_SRC}")
+endif()
+
 if(BUILD_IDE AND NOT IOS AND NOT ANDROID)
     # Development mode sources (from engine_development_mode_source_files in GYP)
     set(DEV_MODE_SOURCES
@@ -399,13 +413,9 @@ if(BUILD_IDE AND NOT IOS AND NOT ANDROID)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/deploysecurity.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/ide.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/bsdiff_build.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/lextable.cpp
+        ${ENGINE_MODE_DEPENDENT_FILES}
+        ${ENGINE_ENCODEDERRORS_FILE}
     )
-
-    # Add generated encodederrors.cpp if available
-    if(EXISTS "${ENCODEDERRORS_SRC}")
-        list(APPEND DEV_MODE_SOURCES "${ENCODEDERRORS_SRC}")
-    endif()
 
     add_executable(development ${DEV_MODE_SOURCES})
     target_link_libraries(development PRIVATE kernel)
@@ -438,6 +448,7 @@ if(BUILD_STANDALONE)
     add_executable(standalone
         ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/mode_standalone.cpp
+        ${ENGINE_MODE_DEPENDENT_FILES}
     )
     target_link_libraries(standalone PRIVATE kernel)
 
@@ -468,8 +479,15 @@ endif()
 if(BUILD_SERVER AND NOT IOS AND NOT ANDROID)
     add_executable(server
         ${CMAKE_CURRENT_SOURCE_DIR}/src/dummy.cpp
+        ${ENGINE_MODE_DEPENDENT_FILES}
+        ${ENGINE_ENCODEDERRORS_FILE}
     )
     target_link_libraries(server PRIVATE kernel)
+
+    target_include_directories(server PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${ENGINE_GENERATED_DIR}
+    )
 
     target_compile_definitions(server PRIVATE
         _SERVER
@@ -484,8 +502,14 @@ endif()
 if(BUILD_INSTALLER AND NOT IOS AND NOT ANDROID)
     add_executable(installer
         ${CMAKE_CURRENT_SOURCE_DIR}/src/dummy.cpp
+        ${ENGINE_MODE_DEPENDENT_FILES}
     )
     target_link_libraries(installer PRIVATE kernel)
+
+    target_include_directories(installer PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${ENGINE_GENERATED_DIR}
+    )
 
     target_compile_definitions(installer PRIVATE
         MODE_INSTALLER
