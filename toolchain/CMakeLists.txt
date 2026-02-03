@@ -42,9 +42,12 @@ endif()
 # ============================================================================
 # reflex - Lexer generator
 # ============================================================================
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gentle/reflex")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gentle/reflex/reflex.c")
     # Reflex lexer generator executable (host tool)
-    # This needs to be built as a host tool for cross-compilation scenarios
+    add_executable(reflex
+        gentle/reflex/reflex.c
+    )
+    target_compile_options(reflex PRIVATE -w -std=gnu89)
 endif()
 
 # ============================================================================
