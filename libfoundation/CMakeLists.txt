@@ -150,18 +150,34 @@ target_include_directories(libFoundation
 
 # Dependencies
 # ICU libraries from prebuilt
-set(OPENXTALK_ICU_LIBS
-    "${CMAKE_SOURCE_DIR}/prebuilt/lib/mac/libicui18n.a"
-    "${CMAKE_SOURCE_DIR}/prebuilt/lib/mac/libicuuc.a"
-    "${CMAKE_SOURCE_DIR}/prebuilt/lib/mac/libicudata.a"
-)
-set(OPENXTALK_ICU_INCLUDE "${CMAKE_SOURCE_DIR}/prebuilt/include")
+# Check multiple locations: prebuilt/lib/mac (legacy) and prebuilt/build/install/mac/<arch>/lib (built from source)
+set(OPENXTALK_ICU_LIBS "")
+set(OPENXTALK_ICU_INCLUDE "")
 
 if(EXISTS "${CMAKE_SOURCE_DIR}/prebuilt/lib/mac/libicuuc.a")
+    # Legacy prebuilt location
+    set(OPENXTALK_ICU_LIBS
+        "${CMAKE_SOURCE_DIR}/prebuilt/lib/mac/libicui18n.a"
+        "${CMAKE_SOURCE_DIR}/prebuilt/lib/mac/libicuuc.a"
+        "${CMAKE_SOURCE_DIR}/prebuilt/lib/mac/libicudata.a"
+    )
+    set(OPENXTALK_ICU_INCLUDE "${CMAKE_SOURCE_DIR}/prebuilt/include")
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/prebuilt/build/install/mac/${CMAKE_SYSTEM_PROCESSOR}/lib/libicuuc.a")
+    # Built-from-source location (prebuilt/build/install/mac/arm64 or x86_64)
+    set(_ICU_INSTALL_DIR "${CMAKE_SOURCE_DIR}/prebuilt/build/install/mac/${CMAKE_SYSTEM_PROCESSOR}")
+    set(OPENXTALK_ICU_LIBS
+        "${_ICU_INSTALL_DIR}/lib/libicui18n.a"
+        "${_ICU_INSTALL_DIR}/lib/libicuuc.a"
+        "${_ICU_INSTALL_DIR}/lib/libicudata.a"
+    )
+    set(OPENXTALK_ICU_INCLUDE "${_ICU_INSTALL_DIR}/include")
+endif()
+
+if(OPENXTALK_ICU_LIBS)
     target_include_directories(libFoundation PUBLIC "${OPENXTALK_ICU_INCLUDE}")
     target_link_libraries(libFoundation PUBLIC ${OPENXTALK_ICU_LIBS})
     target_compile_definitions(libFoundation PUBLIC U_STATIC_IMPLEMENTATION=1)
-    message(STATUS "Using prebuilt ICU libraries")
+    message(STATUS "Using prebuilt ICU libraries from ${OPENXTALK_ICU_INCLUDE}")
 elseif(TARGET ICU::ICU)
     target_link_libraries(libFoundation PUBLIC ICU::ICU)
 elseif(ICU_FOUND)
