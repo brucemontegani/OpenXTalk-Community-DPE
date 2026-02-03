@@ -17,16 +17,20 @@ OpenXTalk Community Edition is an open-source, cross-platform application develo
 ### macOS Build (Primary Development Platform)
 
 ```bash
-# Configure and build
+# Configure and build (uses CMake)
 make config-mac
 make compile-mac                    # Debug build (default)
+MODE=release make config-mac        # Configure release build
 MODE=release make compile-mac       # Release build
 
 # Universal binary (Intel + Apple Silicon)
 make compile-mac-universal
 
 # Open generated Xcode project
-open build-mac/livecode/livecode.xcodeproj
+open build-mac-debug/OpenXTalk.xcodeproj
+
+# Use Unix Makefiles instead of Xcode (faster for CI)
+CMAKE_GENERATOR="Unix Makefiles" make config-mac
 ```
 
 ### iOS Build

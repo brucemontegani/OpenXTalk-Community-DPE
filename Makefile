@@ -68,7 +68,7 @@ clean-linux:
 
 clean-mac:
 	rm -rf mac-*-bin
-	rm -rf build-mac
+	rm -rf build-mac build-mac-debug build-mac-release build-macos-debug
 	rm -rf _cache/mac
 	rm -rf prebuilt/fetched
 	rm -rf prebuilt/include
@@ -176,33 +176,34 @@ all-android-%:
 $(addsuffix -android,all config compile check): %: %-armv6
 
 ################################################################
-# Mac rules
+# Mac rules (CMake)
 ################################################################
+
+# Build directory follows MODE: build-mac-debug or build-mac-release
+MAC_BUILD_DIR ?= build-mac-$(MODE)
+
+# CMake generator - default to Xcode for IDE support
+CMAKE_GENERATOR ?= Xcode
+
+# Number of parallel build jobs
+CMAKE_BUILD_PARALLEL ?= $(shell sysctl -n hw.ncpu 2>/dev/null || echo 4)
+
 config-mac:
-ifneq ($(TRAVIS),undefined)
-	@echo "travis_fold:start:config"
-	@echo "CONFIGURE"
-endif
-	./config.sh --platform mac
-ifneq ($(TRAVIS),undefined)
-	@echo "travis_fold:end:config"
-endif
+	@echo "Configuring macOS build ($(BUILDTYPE)) with CMake"
+	cmake -S . -B $(MAC_BUILD_DIR) -G "$(CMAKE_GENERATOR)" \
+		-DCMAKE_BUILD_TYPE=$(BUILDTYPE)
 
 # Universal binary configuration
 config-mac-universal:
 	@echo "Configuring for Universal Binary (Intel + Apple Silicon)"
-	UNIVERSAL_BUILD=1 $(MAKE) config-mac
+	cmake -S . -B $(MAC_BUILD_DIR) -G "$(CMAKE_GENERATOR)" \
+		-DCMAKE_BUILD_TYPE=$(BUILDTYPE) \
+		-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
 compile-mac:
-ifneq ($(TRAVIS),undefined)
-	@echo "travis_fold:start:compile"
-	@echo "COMPILE"
-endif
-	$(XCODEBUILD) -project "build-mac$(BUILD_SUBDIR)/$(BUILD_PROJECT).xcodeproj" -configuration $(BUILDTYPE) -target default \
-	  $(XCODEBUILD_FILTER)
-ifneq ($(TRAVIS),undefined)
-	@echo "travis_fold:end:compile"
-endif
+	@echo "Building macOS ($(BUILDTYPE))"
+	cmake --build $(MAC_BUILD_DIR) --config $(BUILDTYPE) \
+		--parallel $(CMAKE_BUILD_PARALLEL)
 
 # Universal binary build
 compile-mac-universal: config-mac-universal
@@ -210,17 +211,9 @@ compile-mac-universal: config-mac-universal
 	$(MAKE) compile-mac
 
 check-mac:
-ifneq ($(TRAVIS),undefined)
-	@echo "travis_fold:start:testcpp"
-	@echo "TEST C++"
-endif
-	$(XCODEBUILD) -project "build-mac$(BUILD_SUBDIR)/$(BUILD_PROJECT).xcodeproj" -configuration $(BUILDTYPE) -target check \
-	  $(XCODEBUILD_FILTER)
-ifneq ($(TRAVIS),undefined)
-	@echo "travis_fold:end:testcpp"
-endif
+	@echo "Running macOS tests"
+	cd $(MAC_BUILD_DIR) && ctest --build-config $(BUILDTYPE) --output-on-failure
 	$(MAKE) check-common-mac
-
 
 all-mac:
 	$(MAKE) config-mac
