@@ -51,7 +51,17 @@ set(OPENXTALK_MACOS_FRAMEWORKS
     CoreVideo
     QuartzCore
     WebKit
+    Accelerate
+    CoreFoundation
+    Foundation
 )
+
+# CUPS library for printing (deprecated but still needed)
+find_library(CUPS_LIBRARY cups)
+if(CUPS_LIBRARY)
+    set(OPENXTALK_CUPS_LIBRARY ${CUPS_LIBRARY})
+    message(STATUS "Found CUPS: ${CUPS_LIBRARY}")
+endif()
 
 # Linker flags for deployment target
 # This ensures the binary is marked for the correct minimum OS version

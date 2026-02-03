@@ -17,6 +17,10 @@
 #ifndef __MC_SYSTHREADS__
 #define __MC_SYSTHREADS__
 
+// Forward declarations for thread synchronization types
+typedef struct __MCThreadMutex *MCThreadMutexRef;
+typedef struct __MCThreadCondition *MCThreadConditionRef;
+
 #define kMCThreadPoolSize 1
 
 bool MCThreadPoolInitialize();

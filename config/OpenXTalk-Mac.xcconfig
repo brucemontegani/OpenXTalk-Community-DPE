@@ -1,0 +1,24 @@
+// If your repo-root "version" file is an xcconfig, keep this.
+// If it's NOT an xcconfig, remove this include.
+#include "../version"
+
+// --- Universal build ---
+// ARCHS = $(ARCHS_STANDARD)
+ARCHS = x86_64
+
+// Debug: build just the active arch (faster)
+ONLY_ACTIVE_ARCH[config=Debug] = YES
+
+// Release/Fast: build both (Universal)
+ONLY_ACTIVE_ARCH[config=Release] = NO
+ONLY_ACTIVE_ARCH[config=Fast] = NO
+
+// --- Deployment policy ---
+// Pick one. I'd start with 11.0 (arm64 baseline), and enforce your "security-supported only"
+// policy in docs/testing. You can raise this later without breaking universal mechanics.
+MACOSX_DEPLOYMENT_TARGET = 11.0
+
+// If you want to align dead stripping with Xcode's recommendation:
+DEAD_CODE_STRIPPING[config=Debug] = NO
+DEAD_CODE_STRIPPING[config=Release] = YES
+DEAD_CODE_STRIPPING[config=Fast] = YES

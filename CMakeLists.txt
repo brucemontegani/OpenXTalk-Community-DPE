@@ -13,6 +13,10 @@ foreach(LINE ${VERSION_LINES})
         set(OPENXTALK_VERSION_PATCH ${CMAKE_MATCH_1})
     elseif(LINE MATCHES "^BUILD_REVISION = ([0-9]+)")
         set(OPENXTALK_VERSION_BUILD ${CMAKE_MATCH_1})
+    elseif(LINE MATCHES "^BUILD_SHORT_VERSION = ([0-9.]+)")
+        set(OPENXTALK_VERSION_SHORT ${CMAKE_MATCH_1})
+    elseif(LINE MATCHES "^BUILD_LONG_VERSION = ([0-9.]+)")
+        set(OPENXTALK_VERSION_LONG ${CMAKE_MATCH_1})
     endif()
 endforeach()
 
@@ -34,6 +38,16 @@ execute_process(
 
 message(STATUS "OpenXTalk version: ${PROJECT_VERSION} (build ${OPENXTALK_VERSION_BUILD})")
 message(STATUS "Git revision: ${OPENXTALK_GIT_REVISION}")
+
+# Generate revbuild.h from template
+configure_file(
+    "${CMAKE_SOURCE_DIR}/engine/include/revbuild.h.cmake"
+    "${CMAKE_BINARY_DIR}/include/revbuild.h"
+    @ONLY
+)
+
+# Make the generated include directory available
+include_directories("${CMAKE_BINARY_DIR}/include")
 
 # CMake module path for our custom find modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")

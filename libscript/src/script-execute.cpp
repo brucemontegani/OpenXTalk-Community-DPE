@@ -293,7 +293,10 @@ public:
          
         ffi_cif *t_cif = (ffi_cif *)p_handler->objc.function_cif;
         void (*t_objc_msgSend)() = nullptr;
+#if !defined(__ARM64__)
+        // t_rsize is only used on non-ARM64 architectures for struct return handling
         size_t t_rsize = t_cif->rtype->size;
+#endif
 #if defined(__ARM64__)
         t_objc_msgSend = (void(*)())objc_msgSend;
 #elif defined(__ARM__)

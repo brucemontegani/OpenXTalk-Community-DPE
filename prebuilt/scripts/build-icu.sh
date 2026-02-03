@@ -13,7 +13,8 @@ ICU_VERSION_ALT=$(echo "${ICU_VERSION}" | sed 's/\./_/g')
 ICU_VERSION_MAJOR=$(echo "${ICU_VERSION}" | sed 's/\..*//g')
 
 # Grab the source for the library
-ICU_TGZ="icu-${ICU_VERSION}.tar.gz"
+# ICU_TGZ="icu-${ICU_VERSION}.tar.gz"
+ICU_TGZ="icu4c-${ICU_VERSION_ALT}-src.tgz"
 ICU_SRC="icu-${ICU_VERSION}"
 cd "${BUILDDIR}"
 
@@ -31,22 +32,39 @@ case $(uname) in
 esac
 
 if [ ! -d "$ICU_SRC" ] ; then
-	if [ ! -e "$ICU_TGZ" ] ; then
-		echo "Fetching ICU source"
-		fetchUrl "https://downloads.sourceforge.net/project/icu/ICU4C/${ICU_VERSION}/icu4c-${ICU_VERSION_ALT}-src.tgz" "${ICU_TGZ}"
-		if [ $? != 0 ] ; then
-			echo "    failed"
-			if [ -e "${ICU_TGZ}" ] ; then 
-				rm ${ICU_TGZ} 
-			fi
-			exit
-		fi
-	fi
-	
-	echo "Unpacking ICU source"
-	tar -xf "${ICU_TGZ}"
-	mv icu "${ICU_SRC}"
+    # Prefer vendored ICU source tarball (offline-friendly)
+    VENDORED_ICU_TGZ="${BASEDIR}/sources/icu4c-${ICU_VERSION_ALT}-src.tgz"
+
+    if [ ! -e "$ICU_TGZ" ] ; then
+        if [ -f "${VENDORED_ICU_TGZ}" ] ; then
+            echo "Using vendored ICU source: ${VENDORED_ICU_TGZ}"
+            cp -f "${VENDORED_ICU_TGZ}" "${ICU_TGZ}"
+        else
+            if [ "${OFFLINE:-0}" = "1" ] ; then
+                echo "OFFLINE=1 and ICU source tarball not found." >&2
+                echo "Expected either:" >&2
+                echo "  - ${VENDORED_ICU_TGZ}" >&2
+                echo "  - ${BUILDDIR}/${ICU_TGZ}" >&2
+                exit 2
+            fi
+
+            echo "Fetching ICU source"
+            fetchUrl "https://downloads.sourceforge.net/project/icu/ICU4C/${ICU_VERSION}/icu4c-${ICU_VERSION_ALT}-src.tgz" "${ICU_TGZ}"
+            if [ $? != 0 ] ; then
+                echo "    failed"
+                if [ -e "${ICU_TGZ}" ] ; then
+                    rm -f "${ICU_TGZ}"
+                fi
+                exit 1
+            fi
+        fi
+    fi
+
+    echo "Unpacking ICU source"
+    tar -xf "${ICU_TGZ}"
+    mv icu "${ICU_SRC}"
 fi
+
 
 ICU_LIBS="data i18n io le lx tu uc"
 ICU_BINARIES="icupkg pkgdata"
@@ -292,4 +310,32 @@ if [ "${ARCH}" == "universal" ] ; then
 	done
 else
 	buildICU "${PLATFORM}" "${ARCH}" "${SUBPLATFORM}"
+	# stage mac single-arch ICU outputs into prebuilt/ for gyp consumers ---
+	if [ "${PLATFORM}" = "mac" ] && [ "${ARCH}" != "universal" ]; then
+		# Reconstruct NAME the same way buildICU does, so we copy from the correct install dir
+		if [ ! -z "${SUBPLATFORM}" ]; then
+			NAME="${PLATFORM}/${ARCH}/${SUBPLATFORM}"
+			OUT_SUB="${SUBPLATFORM}"
+		else
+			NAME="${PLATFORM}/${ARCH}"
+			OUT_SUB=""
+		fi
+
+		echo "Staging ICU outputs for ${NAME} -> ${OUTPUT_DIR}/lib/${PLATFORM}/${OUT_SUB} and ${OUTPUT_DIR}/bin/${PLATFORM}/${OUT_SUB}"
+		mkdir -p "${OUTPUT_DIR}/lib/${PLATFORM}/${OUT_SUB}" "${OUTPUT_DIR}/bin/${PLATFORM}/${OUT_SUB}"
+
+		# Static libs expected by prebuilt/libicu.gyp
+		for L in ${ICU_LIBS}; do
+			if [ -f "${INSTALL_DIR}/${NAME}/lib/libicu${L}.a" ]; then
+				cp -f "${INSTALL_DIR}/${NAME}/lib/libicu${L}.a" "${OUTPUT_DIR}/lib/${PLATFORM}/${OUT_SUB}/"
+			fi
+		done
+
+		# Tools expected by build actions (at least icupkg)
+		for B in ${ICU_BINARIES}; do
+			if [ -x "${INSTALL_DIR}/${NAME}/bin/${B}" ]; then
+				cp -f "${INSTALL_DIR}/${NAME}/bin/${B}" "${OUTPUT_DIR}/bin/${PLATFORM}/${OUT_SUB}/"
+			fi
+		done
+	fi
 fi

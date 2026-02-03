@@ -20,8 +20,12 @@ fi
 
 TARGET_NAME=$PLATFORM
 
-if [ "$ARCH" != "" -a "$ARCH" != "universal" ]; then
-	TARGET_NAME=$TARGET_NAME-$ARCH
+# if [ "$ARCH" != "" -a "$ARCH" != "universal" ]; then
+# 	TARGET_NAME=$TARGET_NAME-$ARCH
+# fi
+
+if [ "$PLATFORM" != "mac" ] && [ "$ARCH" != "" -a "$ARCH" != "universal" ]; then
+    TARGET_NAME=$TARGET_NAME-$ARCH
 fi
 
 if [ "$SUBPLATFORM" != "" -a "$PLATFORM" != "android" ]; then

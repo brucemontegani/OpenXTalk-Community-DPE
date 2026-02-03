@@ -10,6 +10,17 @@
 		{
 			'target_name': 'kernel',
 			'type': 'static_library',
+
+			'cflags_cc': [
+  				'-Wno-error=enum-constexpr-conversion',
+			],
+
+			'xcode_settings': {
+  				'OTHER_CPLUSPLUSFLAGS': [
+    				'-Wno-error=enum-constexpr-conversion',
+  				],
+			},
+
 			
 			'dependencies':
 			[

@@ -43,7 +43,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src")
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
         )
-        target_link_libraries(libBrowser PUBLIC libFoundation)
+        target_link_libraries(libBrowser PUBLIC libFoundation libCore)
 
         if(APPLE)
             target_link_libraries(libBrowser PRIVATE

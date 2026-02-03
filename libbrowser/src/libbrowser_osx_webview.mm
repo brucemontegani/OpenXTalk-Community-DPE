@@ -128,6 +128,13 @@ bool MCJSValueToBrowserValue(JSContextRef p_context, JSValueRef p_value, MCBrows
 			
 		case kJSTypeObject:
 			return MCJSObjectToBrowserValue(p_context, (JSObjectRef)p_value, r_value);
+		
+		case kJSTypeSymbol:
+			break;
+
+		case kJSTypeBigInt:
+			break;
+
 	}
 	
 	return false;

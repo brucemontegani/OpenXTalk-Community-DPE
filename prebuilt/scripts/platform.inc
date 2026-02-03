@@ -18,12 +18,15 @@ case $(uname -m) in
 	x86_64)
 		HOST_ARCH=x86_64
 		;;
+	arm64|aarch64)
+		HOST_ARCH=arm64
+		;;
 	i*86)
 		HOST_ARCH=i386
 		;;
 esac
 
-if [ -z "${XCODEBUILD}" ] ; then
+if [ -z "${XCODEBUILD:-}" ] ; then
 	export XCODEBUILD="/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild"
 	XCODE_DEVELOPER="/Applications/Xcode.app/Contents/Developer"
 else
@@ -34,7 +37,10 @@ fi
 # Which platform are we actually targeting?
 case "${PLATFORM}" in
 	mac)
-		export UNIVERSAL_ARCHS="x86_64"
+		# export UNIVERSAL_ARCHS="x86_64"
+		# Default universal arches for modern macOS. Override if you want x86_64-only:
+		#   export UNIVERSAL_ARCHS_MAC="x86_64"
+		export UNIVERSAL_ARCHS="${UNIVERSAL_ARCHS_MAC:-x86_64 arm64}"
 		;;
 	linux)
 		export ARCHS="i386 x86_64"
@@ -60,7 +66,7 @@ function setCCForTarget {
 	local SUBPLATFORM=$3
 	
 	# Use the custom CC and CXX, if set
-	if [ ! -z "${CUSTOM_CC}" -a "${PLATFORM}" != "android" ] ; then
+	if [ ! -z "${CUSTOM_CC:-}" -a "${PLATFORM}" != "android" ] ; then
 		export CC="${CUSTOM_CC}"
 		export CXX="${CUSTOM_CXX}"
 		return
@@ -90,15 +96,28 @@ function setCCForTarget {
 			;;
 		mac)
 			# OSX options
-			PLATFORM_DEVELOPER="${XCODE_DEVELOPER}/Platforms/MacOSX.platform/Developer"
-			SDK="MacOSX10.9.sdk"
-			OSXGCCVERSION=4.2
-			OSXMIN="10.6"
+			# PLATFORM_DEVELOPER="${XCODE_DEVELOPER}/Platforms/MacOSX.platform/Developer"
+			# SDK="MacOSX10.9.sdk"
+			# OSXGCCVERSION=4.2
+			# OSXMIN="10.6"
 
-			CC_BASE="${XCODE_DEVELOPER}/usr/bin/gcc --sysroot=${PLATFORM_DEVELOPER}/SDKs/${SDK} -isysroot ${PLATFORM_DEVELOPER}/SDKs/${SDK} -mmacosx-version-min=${OSXMIN}"
-			CXX_BASE="${XCODE_DEVELOPER}/usr/bin/g++ --sysroot=${PLATFORM_DEVELOPER}/SDKs/${SDK} -isysroot ${PLATFORM_DEVELOPER}/SDKs/${SDK} -mmacosx-version-min=${OSXMIN}"
+			# CC_BASE="${XCODE_DEVELOPER}/usr/bin/gcc --sysroot=${PLATFORM_DEVELOPER}/SDKs/${SDK} -isysroot ${PLATFORM_DEVELOPER}/SDKs/${SDK} -mmacosx-version-min=${OSXMIN}"
+			# CXX_BASE="${XCODE_DEVELOPER}/usr/bin/g++ --sysroot=${PLATFORM_DEVELOPER}/SDKs/${SDK} -isysroot ${PLATFORM_DEVELOPER}/SDKs/${SDK} -mmacosx-version-min=${OSXMIN}"
+			# CC="${CC_BASE} -arch ${ARCH}"
+			# CXX="${CXX_BASE} -arch ${ARCH}"
+			# Modern macOS toolchain (avoid hardcoded old SDKs that don't exist in new Xcode)
+			SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+			OSXMIN="${MACOSX_DEPLOYMENT_TARGET:-${MIN_MACOSX_VERSION:-13.0}}"
+
+			CC_BASE="$(xcrun --sdk macosx -f clang) -isysroot ${SDKROOT} -mmacosx-version-min=${OSXMIN}"
+			CXX_BASE="$(xcrun --sdk macosx -f clang++) -isysroot ${SDKROOT} -mmacosx-version-min=${OSXMIN}"
 			CC="${CC_BASE} -arch ${ARCH}"
 			CXX="${CXX_BASE} -arch ${ARCH}"
+
+			# Optional, but can help consistency:
+			AR="$(xcrun --sdk macosx -f ar)"
+			RANLIB="$(xcrun --sdk macosx -f ranlib)"
+			STRIP="$(xcrun --sdk macosx -f strip)"
 			;;
 		linux)
 			CC_BASE="gcc"

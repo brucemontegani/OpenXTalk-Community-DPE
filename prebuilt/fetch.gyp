@@ -365,7 +365,8 @@
 					
 					'inputs':
 					[
-						'fetch-libraries.sh',
+						# 'fetch-libraries.sh',
+						'build-libraries.sh',
 					],
 					
 					'outputs':
@@ -376,8 +377,11 @@
 					
 					'action':
 					[
-						'./fetch-libraries.sh',
-						'mac',
+						'./build-libraries.sh',  
+ 						'mac',
+ 						'universal',
+						# './fetch-libraries.sh',
+						# 'mac',
 					],
 				},
 			],

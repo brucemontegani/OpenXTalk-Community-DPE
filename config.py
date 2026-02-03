@@ -351,29 +351,51 @@ def validate_gyp_settings(opts):
     if opts['BUILD_EDITION'] is None:
         opts['BUILD_EDITION'] = 'community'
 
+def _run(cmd):
+    # Returns a str (not bytes), trimmed
+    return subprocess.check_output(cmd, text=True).strip()
+
 def guess_java_home(platform):
+    # Linux: follow /usr/bin/javac -> real path
     if platform.startswith('linux'):
         try:
             javac_str = '/bin/javac'
-            javac_path = subprocess.check_output(['/usr/bin/env',
-                         'readlink', '-f', '/usr' + javac_str]).strip()
-            if (os.path.isfile(javac_path) and
-                javac_path.endswith(javac_str)):
+            javac_path = _run(['/usr/bin/env', 'readlink', '-f', '/usr' + javac_str])
+            if os.path.isfile(javac_path) and javac_path.endswith(javac_str):
                 return javac_path[:-len(javac_str)]
         except subprocess.CalledProcessError as e:
             print(e)
-            pass # Fall through to other ways of guessing
+            pass
 
-    # More guesses
+    # macOS (and others): try /usr/libexec/java_home correctly
     try:
         if os.path.isfile('/usr/libexec/java_home'):
-            return subprocess.check_output('/usr/libexec/java_home').strip()
+            jh = _run(['/usr/libexec/java_home'])
+            if jh and os.path.isdir(jh):
+                return jh
     except subprocess.CalledProcessError as e:
+        # Expected on systems with no registered JDKs
         print(e)
         pass
+
+    # Homebrew fallback (macOS): brew --prefix openjdk(@ver) -> .../Contents/Home
+    if platform.startswith('mac') or platform == 'darwin':
+        for formula in ('openjdk', 'openjdk@21', 'openjdk@17', 'openjdk@11'):
+            try:
+                prefix = _run(['brew', '--prefix', formula])
+                candidate = os.path.join(prefix, 'libexec', 'openjdk.jdk', 'Contents', 'Home')
+                if os.path.isdir(candidate):
+                    return candidate
+            except Exception:
+                pass
+
+    # Other common guesses
     for d in ('/usr/lib/jvm/default', '/usr/lib/jvm/default-java'):
         if os.path.isdir(d):
             return d
+
+    return None
+
 
 def validate_java_tools(opts):
     if opts['JAVA_SDK'] is None:
@@ -820,6 +842,7 @@ def configure_mac(opts):
     host_platform(opts)
     validate_target_arch(opts)
     validate_xcode_sdks(opts)
+    validate_java_tools(opts)
     
     # Auto-detect available SDK
     import subprocess
@@ -837,7 +860,11 @@ def configure_mac(opts):
     # Check for universal build request
     universal_build = os.environ.get('UNIVERSAL_BUILD', '0') == '1'
     
-    if universal_build:
+    forced_arch = os.environ.get('TARGET_ARCH')
+    if forced_arch:
+        opts['TARGET_ARCH'] = forced_arch
+        print(f"Configuring for {opts['TARGET_ARCH']} (forced)")
+    elif universal_build:    
         # Override architecture detection for universal builds
         opts['TARGET_ARCH'] = 'x86_64 arm64'
         print("Configuring for Universal Binary (x86_64 + arm64)")
@@ -859,9 +886,9 @@ def configure_mac(opts):
     if 'MACOSX_DEPLOYMENT_TARGET' not in opts or opts['MACOSX_DEPLOYMENT_TARGET'] is None:
         opts['MACOSX_DEPLOYMENT_TARGET'] = '13.0'
     
-    # Set dummy JAVA_SDK for gyp (not used in Mac builds, but referenced in gyp files)
-    if opts['JAVA_SDK'] is None:
-        opts['JAVA_SDK'] = '/tmp'
+    # # Set dummy JAVA_SDK for gyp (not used in Mac builds, but referenced in gyp files)
+    # if opts['JAVA_SDK'] is None:
+    #     opts['JAVA_SDK'] = "$(brew --prefix openjdk)/libexec/openjdk.jdk/Contents/Home"
 
     copy_workspace_settings(opts)
     

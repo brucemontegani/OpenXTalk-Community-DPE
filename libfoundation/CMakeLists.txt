@@ -149,7 +149,20 @@ target_include_directories(libFoundation
 )
 
 # Dependencies
-if(TARGET ICU::ICU)
+# ICU libraries from prebuilt
+set(OPENXTALK_ICU_LIBS
+    "${CMAKE_SOURCE_DIR}/prebuilt/lib/mac/libicui18n.a"
+    "${CMAKE_SOURCE_DIR}/prebuilt/lib/mac/libicuuc.a"
+    "${CMAKE_SOURCE_DIR}/prebuilt/lib/mac/libicudata.a"
+)
+set(OPENXTALK_ICU_INCLUDE "${CMAKE_SOURCE_DIR}/prebuilt/include")
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/prebuilt/lib/mac/libicuuc.a")
+    target_include_directories(libFoundation PUBLIC "${OPENXTALK_ICU_INCLUDE}")
+    target_link_libraries(libFoundation PUBLIC ${OPENXTALK_ICU_LIBS})
+    target_compile_definitions(libFoundation PUBLIC U_STATIC_IMPLEMENTATION=1)
+    message(STATUS "Using prebuilt ICU libraries")
+elseif(TARGET ICU::ICU)
     target_link_libraries(libFoundation PUBLIC ICU::ICU)
 elseif(ICU_FOUND)
     target_include_directories(libFoundation PUBLIC ${ICU_INCLUDE_DIRS})
@@ -213,13 +226,22 @@ if((APPLE AND NOT IOS) OR (UNIX AND NOT APPLE AND NOT EMSCRIPTEN AND NOT ANDROID
     endif()
 endif()
 
-# Generated ICU data (will be created by a custom command)
-# The minimal ICU data file needs to be generated during build
+# Generated ICU data - copy from existing GYP build if available
 set(LIBFOUNDATION_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated/libfoundation")
 file(MAKE_DIRECTORY ${LIBFOUNDATION_GENERATED_DIR})
 
-# Add a placeholder for the generated ICU data
-# This will be properly implemented when we set up the ICU data generation
+# Try to find the existing ICU data file from the GYP build
+set(ICUDATA_MINIMAL_SRC "${CMAKE_SOURCE_DIR}/_build/mac/DerivedSources/Debug/src/icudata-minimal.cpp")
+set(ICUDATA_MINIMAL_DST "${LIBFOUNDATION_GENERATED_DIR}/icudata-minimal.cpp")
+
+if(EXISTS "${ICUDATA_MINIMAL_SRC}")
+    configure_file("${ICUDATA_MINIMAL_SRC}" "${ICUDATA_MINIMAL_DST}" COPYONLY)
+    target_sources(libFoundation PRIVATE "${ICUDATA_MINIMAL_DST}")
+    message(STATUS "Using existing ICU minimal data from GYP build")
+else()
+    message(WARNING "ICU minimal data not found - Unicode support may not work")
+endif()
+
 target_include_directories(libFoundation PRIVATE ${LIBFOUNDATION_GENERATED_DIR})
 
 # Create an alias for consistent naming

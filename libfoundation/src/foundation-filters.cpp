@@ -253,9 +253,16 @@ bool MCFiltersDecompress(MCDataRef p_source, MCDataRef& r_result)
 {
 	const char_t *t_src_ptr = MCDataGetBytePtr(p_source);
 	uindex_t t_src_len = MCDataGetLength(p_source);
-    
+
+	// Need at least 10 bytes for gzip header + 8 bytes for trailer
+	if (t_src_len < 18)
+	{
+		r_result = MCValueRetain(kMCEmptyData);
+		return true;
+	}
+
 	const char_t *sptr = t_src_ptr;
-    
+
 	uint32_t startindex = 10;
 	if (sptr[3] & GZIP_EXTRA_FIELD)
 	{ /* skip the extra field */

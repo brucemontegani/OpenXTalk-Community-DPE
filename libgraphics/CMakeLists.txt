@@ -19,7 +19,6 @@ set(LIBGRAPHICS_SOURCES
     src/drawing.cpp
     src/image.cpp
     src/legacygradients.cpp
-    src/lnxtext.cpp
     src/path.cpp
     src/region.cpp
     src/spread.cpp
@@ -39,6 +38,13 @@ if(WIN32)
     # Windows uses DirectWrite
     list(APPEND LIBGRAPHICS_SOURCES
         src/directwrite-skia.cpp
+    )
+endif()
+
+if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+    # Linux uses Pango
+    list(APPEND LIBGRAPHICS_SOURCES
+        src/lnxtext.cpp
     )
 endif()
 
@@ -64,12 +70,17 @@ set_target_properties(libGraphics PROPERTIES
 )
 
 # Include directories
+# Skia includes and defines are propagated via the libskia target's PUBLIC interface
 target_include_directories(libGraphics
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        # Additional Skia internal dirs needed by libGraphics
+        ${OPENXTALK_THIRDPARTY_DIR}/libskia/src/image
+        ${OPENXTALK_THIRDPARTY_DIR}/libskia/src/opts
+        ${OPENXTALK_THIRDPARTY_DIR}/libskia/src/utils
 )
 
 # Dependencies

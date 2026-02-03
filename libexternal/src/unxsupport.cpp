@@ -137,7 +137,7 @@ char *os_path_resolve(const char *p_native_path)
 			strcat(tildepath, "/");
 			strcat(tildepath, tptr);
 		}
-		delete tpath;
+		delete[] tpath;
 	}
 	else
 #endif
@@ -150,11 +150,11 @@ char *os_path_resolve(const char *p_native_path)
 	char *newname = new (nothrow) char[PATH_MAX + 2];
 	if ((size = readlink(tildepath, newname, PATH_MAX)) < 0)
 	{
-		delete tildepath;
-		delete newname;
+		delete[] tildepath;
+		delete[] newname;
 		return NULL;
 	}
-	delete tildepath;
+	delete[] tildepath;
 	newname[size] = '\0';
 	if (newname[0] != '/')
 	{
@@ -166,9 +166,9 @@ char *os_path_resolve(const char *p_native_path)
 		else
 			sptr++;
 		strcpy(sptr, newname);
-		delete newname;
+		delete[] newname;
 		newname = os_path_resolve(fullpath);
-		delete fullpath;
+		delete[] fullpath;
 	}
 	return newname;
 }

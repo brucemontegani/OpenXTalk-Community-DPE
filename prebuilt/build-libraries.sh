@@ -4,7 +4,8 @@
 set -e
 
 # Build location
-export BASEDIR=$(dirname $0)
+# export BASEDIR=$(dirname $0)
+export BASEDIR="$(cd "$(dirname "$0")" && pwd)"
 export BUILDDIR="`pwd`/build"
 export INSTALL_DIR="`pwd`/build/install"
 export OUTPUT_DIR="`pwd`"
@@ -13,8 +14,21 @@ mkdir -p "${INSTALL_DIR}"
 mkdir -p "${OUTPUT_DIR}"
 
 # Target platform and architecture
-export PLATFORM=$1
-export ARCH=$2
+# export PLATFORM=$1
+# export ARCH=$2
+export PLATFORM="${1:?missing platform (e.g. mac)}"
+export ARCH="${2:-}"
+
+# Default arch if not provided
+if [ -z "${ARCH}" ]; then
+  case "${PLATFORM}" in
+    mac|ios) ARCH="universal" ;;
+    *) echo "Missing ARCH (e.g. x86_64, arm64, universal)" >&2; exit 2 ;;
+  esac
+fi
+
+# Normalize casing: Universal -> universal
+ARCH="$(echo "${ARCH}" | tr '[:upper:]' '[:lower:]')"
 
 #only ios and android subplatforms are used
 if [ "${PLATFORM}" == "ios" ] || [ "${PLATFORM}" == "android" ] ; then

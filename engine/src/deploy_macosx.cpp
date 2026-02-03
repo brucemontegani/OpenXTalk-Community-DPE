@@ -65,8 +65,11 @@ typedef int             vm_prot_t;
 
 #define VM_PROT_ALL     (VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE)
 
+// On modern macOS these types are already defined in system headers
+#ifndef _MACH_MACHINE_H_
 typedef uint32_t       cpu_type_t;
 typedef uint32_t       cpu_subtype_t;
+#endif
 
 /*
  * Capability bits used in the definition of cpu_type.
