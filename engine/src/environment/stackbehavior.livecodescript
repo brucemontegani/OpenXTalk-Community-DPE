@@ -1021,10 +1021,20 @@ command guessRepositoryPath
    put "build-" & tPlatform & "-" & tProcessor into tBuildDir
    put tPlatform & "-" & tProcessor & "-bin" into tPackageDir
    put tPlatform & "-bin" into tAltPackageDir
-   
+
+   -- CMake build directories use build-{platform}-{mode} (e.g. build-mac-debug)
+   local tBuildDirDebug
+   local tBuildDirRelease
+   put "build-" & tPlatform & "-debug" into tBuildDirDebug
+   put "build-" & tPlatform & "-release" into tBuildDirRelease
+
    set the itemDelimiter to "/"
    if tBuildDir is among the items of sEnginePath then
       put item 1 to (itemOffset(tBuildDir,sEnginePath) - 1) of sEnginePath into sRepositoryPath
+   else if tBuildDirDebug is among the items of sEnginePath then
+      put item 1 to (itemOffset(tBuildDirDebug,sEnginePath) - 1) of sEnginePath into sRepositoryPath
+   else if tBuildDirRelease is among the items of sEnginePath then
+      put item 1 to (itemOffset(tBuildDirRelease,sEnginePath) - 1) of sEnginePath into sRepositoryPath
    else if tPackageDir is among the items of sEnginePath then
       put item 1 to (itemOffset(tPackageDir,sEnginePath) - 1) of sEnginePath into sRepositoryPath
    else if tAltPackageDir is among the items of sEnginePath then

@@ -4,37 +4,48 @@
 message(STATUS "Configuring libbrowser")
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src")
-    set(LIBBROWSER_SOURCES)
+    # Common sources (all platforms)
+    set(LIBBROWSER_SOURCES
+        src/libbrowser.cpp
+        src/libbrowser_memory.cpp
+        src/libbrowser_value.cpp
+    )
 
-    # Common sources
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/libbrowser.cpp")
-        list(APPEND LIBBROWSER_SOURCES src/libbrowser.cpp)
-    endif()
-
-    # macOS WebView implementation
+    # macOS sources
     if(APPLE AND NOT IOS)
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/libbrowser_osx_webview.mm")
-            list(APPEND LIBBROWSER_SOURCES src/libbrowser_osx_webview.mm)
-        endif()
+        list(APPEND LIBBROWSER_SOURCES
+            src/libbrowser_osx_webview.mm
+            src/libbrowser_nsvalue.mm
+            src/libbrowser_osx_factories.cpp
+        )
     endif()
 
-    # iOS WebView implementation
+    # iOS sources
     if(APPLE AND IOS)
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/libbrowser_ios.mm")
-            list(APPEND LIBBROWSER_SOURCES src/libbrowser_ios.mm)
-        endif()
+        list(APPEND LIBBROWSER_SOURCES
+            src/libbrowser_wkwebview.mm
+            src/libbrowser_nsvalue.mm
+            src/libbrowser_ios_factories.cpp
+        )
     endif()
 
-    # Windows implementation
+    # Windows sources
     if(WIN32)
-        file(GLOB LIBBROWSER_WIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*_win*.cpp")
-        list(APPEND LIBBROWSER_SOURCES ${LIBBROWSER_WIN_SOURCES})
+        list(APPEND LIBBROWSER_SOURCES
+            src/libbrowser_cef.cpp
+            src/libbrowser_cef_win.cpp
+            src/libbrowser_win_factories.cpp
+        )
     endif()
 
-    # Linux/CEF implementation
+    # Linux sources (CEF on x86/x86_64)
     if(UNIX AND NOT APPLE)
-        file(GLOB LIBBROWSER_LINUX_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*_linux*.cpp")
-        list(APPEND LIBBROWSER_SOURCES ${LIBBROWSER_LINUX_SOURCES})
+        list(APPEND LIBBROWSER_SOURCES
+            src/libbrowser_cef.cpp
+            src/libbrowser_cef_lnx.cpp
+            src/libbrowser_lnx_factories.cpp
+            src/signal_restore_posix.cpp
+        )
     endif()
 
     if(LIBBROWSER_SOURCES)
@@ -48,6 +59,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src")
         if(APPLE)
             target_link_libraries(libBrowser PRIVATE
                 "-framework WebKit"
+                "-framework JavaScriptCore"
             )
         endif()
 

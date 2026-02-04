@@ -309,7 +309,11 @@ IO_stat MCDispatch::startup(void)
         
         IO_handle stream = MCS_fakeopen(MCDataGetBytePtr(*t_decompressed),
                                         MCDataGetLength(*t_decompressed));
-        if ((stat = MCdispatcher -> readfile(NULL, NULL, stream, sptr)) != IO_NORMAL)
+        // Pass MCcmd as the open path so the stack's filename is set before
+        // behavior scripts (stackFiles with relative paths like
+        // "environment/stackbehavior.livecodescript") are resolved inside
+        // readfile's resolveparentscripts() call.
+        if ((stat = MCdispatcher -> readfile(MCcmd, NULL, stream, sptr)) != IO_NORMAL)
         {
             if (MCdispatcher -> loadfile(MCstacknames[0], sptr) != IO_NORMAL)
             {
@@ -336,7 +340,10 @@ IO_stat MCDispatch::startup(void)
 
         MCenvironmentactive = True;
         sptr -> setfilename(MCcmd);
-        MCdefaultstackptr = MCstaticdefaultstackptr = stacks;
+        // Use sptr (the environment stack) rather than stacks, because
+        // stacks may point to behavior script stacks loaded during
+        // resolveparentscripts() when scripts are not descriptified.
+        MCdefaultstackptr = MCstaticdefaultstackptr = sptr;
 
         {
             MCdefaultstackptr -> setextendedstate(true, ECS_DURING_STARTUP);
@@ -352,7 +359,7 @@ IO_stat MCDispatch::startup(void)
             MCValueRef t_valueref2;
             t_valueref2 = nil;
             MCresult -> eval(ctxt, t_valueref);
-            
+
             if (MCValueIsEmpty(t_valueref))
             {
                 sptr -> open();
@@ -376,6 +383,40 @@ IO_stat MCDispatch::startup(void)
             //	memset(sptr -> getscript(), 0, strlen(sptr -> getscript()));
 
             destroystack(sptr, True);
+
+            // Clean up orphaned behavior script stacks left behind by
+            // the environment stack. When behavior scripts are not
+            // descriptified (CMake build), resolveparentscripts() loads
+            // them as separate stacks. Their parent was set to the
+            // environment stack, which has now been destroyed, leaving
+            // invalid parent proxies. If these stacks remain in the
+            // stacks list, newly loaded stacks get their parent set to
+            // stacks (an orphaned behavior script stack) in
+            // trytoreadbinarystack(), creating a broken parent chain
+            // that crashes during rendering.
+            if (stacks != nil)
+            {
+                MCStack *t_next;
+                MCStack *t_check = stacks;
+                // Collect stacks to destroy (can't modify list while iterating)
+                MCStack *t_orphans[64];
+                int t_orphan_count = 0;
+                do
+                {
+                    t_next = (MCStack *)t_check->next();
+                    // Check if this stack's parent is invalid (points to
+                    // the destroyed environment stack)
+                    MCObject *t_parent = t_check->getparent();
+                    if (t_parent == nil && t_orphan_count < 64)
+                        t_orphans[t_orphan_count++] = t_check;
+                    t_check = t_next;
+                }
+                while (t_check != stacks && stacks != nil);
+
+                for (int i = 0; i < t_orphan_count; i++)
+                    destroystack(t_orphans[i], True);
+            }
+
             MCtopstackptr = nil;
             MCquit = False;
             MCenvironmentactive = False;
@@ -405,7 +446,10 @@ IO_stat MCDispatch::startup(void)
 		// regardless of what the environment stack may have set it to.
 		MCallowinterrupts = true;
 		sptr -> setparent(this);
-		MCdefaultstackptr = MCstaticdefaultstackptr = stacks;
+		// Use sptr (the loaded home stack) rather than stacks, because
+		// stacks may point to orphaned behavior script stacks from the
+		// environment stack when behavior scripts are not descriptified.
+		MCdefaultstackptr = MCstaticdefaultstackptr = sptr;
 		send_startup_message(false);
 		if (!MCquit)
 			sptr -> open();
