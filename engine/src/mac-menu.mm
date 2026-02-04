@@ -1563,15 +1563,18 @@ static void MCPlatformDestroyMenuItem(MCPlatformMenuRef p_menu, uindex_t p_index
 	
 	MCPlatformMenuRef t_submenu_ref;
 	t_submenu_ref = [(MCMenuDelegate *)[t_submenu delegate] platformMenuRef];
-	
+
 	// Update the submenu pointer (so we don't have any dangling
 	// refs).
     [t_item setSubmenu: nil];
-    
-    MCPlatformRemoveSubmenuFromMenu(p_menu, t_submenu_ref);
-	
-	// Now release the platform menu.
-	MCPlatformReleaseMenu(t_submenu_ref);
+
+	if (t_submenu_ref != nil)
+	{
+		MCPlatformRemoveSubmenuFromMenu(p_menu, t_submenu_ref);
+
+		// Now release the platform menu.
+		MCPlatformReleaseMenu(t_submenu_ref);
+	}
 }
 
 // Map the incoming index to the internal menu item index (taking into account
