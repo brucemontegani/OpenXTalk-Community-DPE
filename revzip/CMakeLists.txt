@@ -32,12 +32,13 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src")
             "-framework CoreFoundation"
         )
 
-        # Copy revzip.bundle to the IDE bin directory
+        # Copy revzip.bundle to the IDE bin directory and ad-hoc sign it
         add_custom_command(TARGET external-revzip POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "$<TARGET_BUNDLE_DIR:external-revzip>"
                 "${CMAKE_BINARY_DIR}/$<CONFIG>/bin/revzip.bundle"
-            COMMENT "Copying revzip.bundle to bin directory"
+            COMMAND codesign --force --sign - "${CMAKE_BINARY_DIR}/$<CONFIG>/bin/revzip.bundle"
+            COMMENT "Copying and signing revzip.bundle"
         )
     endif()
 else()

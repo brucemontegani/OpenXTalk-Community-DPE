@@ -41,12 +41,13 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src")
             -exported_symbols_list "${CMAKE_CURRENT_SOURCE_DIR}/revxml.exports"
         )
 
-        # Copy revxml.bundle to the IDE bin directory
+        # Copy revxml.bundle to the IDE bin directory and ad-hoc sign it
         add_custom_command(TARGET external-revxml POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "$<TARGET_BUNDLE_DIR:external-revxml>"
                 "${CMAKE_BINARY_DIR}/$<CONFIG>/bin/revxml.bundle"
-            COMMENT "Copying revxml.bundle to bin directory"
+            COMMAND codesign --force --sign - "${CMAKE_BINARY_DIR}/$<CONFIG>/bin/revxml.bundle"
+            COMMENT "Copying and signing revxml.bundle"
         )
     endif()
 else()
