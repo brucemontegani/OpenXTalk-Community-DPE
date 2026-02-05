@@ -81,16 +81,19 @@ __pycache__/
 # -----------------------------------------------------------------------------
 # Prebuilt Dependencies
 # -----------------------------------------------------------------------------
-# These should be fetched, not committed
+# Build artifacts from compiling dependencies (can be regenerated)
+prebuilt/build/
+prebuilt/sources/
+prebuilt/share/
 prebuilt/fetched/
-prebuilt/include/
-prebuilt/lib/
-prebuilt/bin/
 
-# But keep the manifest/config files
-!prebuilt/*.txt
-!prebuilt/*.gypi
-!prebuilt/Makefile
+# The actual prebuilt libraries ARE committed for convenience:
+# prebuilt/lib/    - universal static libraries (ICU, OpenSSL)
+# prebuilt/include/ - header files
+!prebuilt/lib/
+!prebuilt/lib/**
+!prebuilt/include/
+!prebuilt/include/**
 
 # -----------------------------------------------------------------------------
 # IDE and Editor Files
