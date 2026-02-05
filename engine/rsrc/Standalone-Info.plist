@@ -64,5 +64,7 @@
 	<string>com_runrev_livecode_MCApplication</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSRequiresAquaSystemAppearance</key>
+	<true/>
 </dict>
 </plist>
