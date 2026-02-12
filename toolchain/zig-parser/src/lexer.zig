@@ -2,6 +2,7 @@ const token_mod = @import("token.zig");
 const std = @import("std");
 const Token = token_mod.Token;
 const Tag = token_mod.Tag;
+const keywords = token_mod.keywords
 
 pub const Lexer = struct {
     source: []const u8,
@@ -209,26 +210,6 @@ pub const Lexer = struct {
         self.index += 1;
     }
 };
-
-const keywords = std.StaticStringMap(Tag).initComptime(.{                                                                                                                                       
-      .{ "on", .KW_ON },                                                                                                                                                                          
-      .{ "end", .KW_END },                                                                                                                                                                        
-      .{ "put", .KW_PUT },                                                                                                                                                                        
-      .{ "into", .KW_INTO },
-      .{ "after", .KW_AFTER },
-      .{ "before", .KW_BEFORE },
-      .{ "if", .KW_IF },
-      .{ "then", .KW_THEN },
-      .{ "else", .KW_ELSE },
-      .{ "repeat", .KW_REPEAT },
-      .{ "function", .KW_FUNCTION },
-      .{ "return", .KW_RETURN },
-      .{ "the", .KW_THE },
-      .{ "of", .KW_OF },
-  });
-
-
-
 
 
 const testing = std.testing;

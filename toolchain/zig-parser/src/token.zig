@@ -35,6 +35,23 @@ pub const Tag = enum {
     KW_OF,
 };
 
+const keywords = std.StaticStringMap(Tag).initComptime(.{                                                                                                                                       
+      .{ "on", .KW_ON },                                                                                                                                                                          
+      .{ "end", .KW_END },                                                                                                                                                                        
+      .{ "put", .KW_PUT },                                                                                                                                                                        
+      .{ "into", .KW_INTO },
+      .{ "after", .KW_AFTER },
+      .{ "before", .KW_BEFORE },
+      .{ "if", .KW_IF },
+      .{ "then", .KW_THEN },
+      .{ "else", .KW_ELSE },
+      .{ "repeat", .KW_REPEAT },
+      .{ "function", .KW_FUNCTION },
+      .{ "return", .KW_RETURN },
+      .{ "the", .KW_THE },
+      .{ "of", .KW_OF },
+  });
+
 pub const Token = struct {
     tag: Tag,
     loc: struct { start: usize, end: usize },
