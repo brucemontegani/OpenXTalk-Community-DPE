@@ -2,7 +2,7 @@ const token_mod = @import("token.zig");
 const std = @import("std");
 const Token = token_mod.Token;
 const Tag = token_mod.Tag;
-const keywords = token_mod.keywords
+const keywords = token_mod.keywords;
 
 pub const Lexer = struct {
     source: []const u8,

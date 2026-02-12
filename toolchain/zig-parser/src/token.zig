@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const Tag = enum {
     ST_UNDEFINED, // Control token (Undefined)
     ST_ERR, // Control token (Error)
@@ -35,7 +37,7 @@ pub const Tag = enum {
     KW_OF,
 };
 
-const keywords = std.StaticStringMap(Tag).initComptime(.{                                                                                                                                       
+pub const keywords = std.StaticStringMap(Tag).initComptime(.{                                                                                                                                       
       .{ "on", .KW_ON },                                                                                                                                                                          
       .{ "end", .KW_END },                                                                                                                                                                        
       .{ "put", .KW_PUT },                                                                                                                                                                        
