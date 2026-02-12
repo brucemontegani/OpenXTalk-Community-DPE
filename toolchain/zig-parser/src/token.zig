@@ -35,6 +35,8 @@ pub const Tag = enum {
     KW_RETURN,
     KW_THE,
     KW_OF,
+    KW_WITH,
+    KW_TO,
 };
 
 pub const keywords = std.StaticStringMap(Tag).initComptime(.{                                                                                                                                       
@@ -52,6 +54,8 @@ pub const keywords = std.StaticStringMap(Tag).initComptime(.{
       .{ "return", .KW_RETURN },
       .{ "the", .KW_THE },
       .{ "of", .KW_OF },
+      .{ "with", .KW_WITH },
+      .{ "to", .KW_TO },
   });
 
 pub const Token = struct {
