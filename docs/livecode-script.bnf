@@ -1,0 +1,1184 @@
+(* ================================================================== *)
+(* LiveCode Script — Comprehensive EBNF Grammar                       *)
+(*                                                                    *)
+(* Authoritative specification for the Zig parser prototype at        *)
+(* toolchain/zig-parser/. Derived from engine/src/parsedef.h,         *)
+(* engine/src/sysdefs.h, and ide/Documentation/guides/.               *)
+(*                                                                    *)
+(* Notation:                                                          *)
+(*   ::=          definition                                          *)
+(*   |            alternative                                         *)
+(*   [ ... ]      optional                                            *)
+(*   { ... }      zero or more repetitions                            *)
+(*   ( ... )      grouping                                            *)
+(*   " ... "      terminal keyword/symbol (case-insensitive)          *)
+(*   (* ... *)    comment                                             *)
+(*   'c'          literal character                                   *)
+(* ================================================================== *)
+
+
+(* ================================================================== *)
+(* Section 1: Lexical Elements                                        *)
+(* ================================================================== *)
+
+(* Any printable or whitespace character *)
+character     ::= letter | digit | symbol | ' '
+letter        ::= 'A' | 'B' | ... | 'Z' | 'a' | 'b' | ... | 'z' | '_'
+digit         ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
+symbol        ::= '!' | '#' | '$' | '%' | '&' | '(' | ')' | '*' | '+'
+                | ',' | '-' | '.' | '/' | ':' | ';' | '<' | '=' | '>'
+                | '?' | '@' | '[' | '\' | ']' | '^' | '{' | '|' | '}' | '~'
+                | '"' | "'"
+hexDigit      ::= digit | 'a' | 'b' | 'c' | 'd' | 'e' | 'f'
+                         | 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
+
+(* Identifiers are case-insensitive *)
+identifier    ::= letter { letter | digit }
+
+(* Numeric literals *)
+integer       ::= digit { digit }
+real          ::= digit { digit } '.' digit { digit }
+hexNumber     ::= "0x" hexDigit { hexDigit }
+number        ::= [ '-' ] ( integer | real | hexNumber )
+
+(* String literal: double-quoted, backslash-escapes not standard *)
+stringLiteral ::= '"' { character } '"'
+
+(* Line structure *)
+newline       ::= LF | CR | CR LF
+statementSep  ::= ';'
+EOL           ::= newline | statementSep | EOF
+
+(* Line continuation: backslash before newline joins two physical lines *)
+lineContinuation ::= '\' newline
+(* When a lineContinuation is encountered, the newline is suppressed
+   and the next physical line is treated as part of the current logical line. *)
+
+(* Comments *)
+lineComment   ::= ( "--" | "//" | "#" ) { character } newline
+blockComment  ::= "/*" { character } "*/"
+comment       ::= lineComment | blockComment
+
+(* Boolean constants *)
+booleanLiteral ::= "true" | "false"
+
+(* Special named constants *)
+namedConstant ::= "empty" | "space" | "tab" | "return" | "cr" | "lf"
+                | "crlf" | "linefeed" | "formfeed" | "null"
+                | "quote" | "backslash" | "comma"
+                | "pi" | "infinity"
+                | "zero" | "one" | "two" | "three" | "four"
+                | "five" | "six" | "seven" | "eight" | "nine" | "ten"
+                | "colon" | "nul"
+
+literal       ::= number | stringLiteral | booleanLiteral | namedConstant
+
+
+(* ================================================================== *)
+(* Section 2: Program Structure                                       *)
+(* ================================================================== *)
+
+script        ::= { topLevelElement }
+topLevelElement ::= handlerDef | declaration | comment | EOL
+
+
+(* ================================================================== *)
+(* Section 3: Handler Definitions                                     *)
+(* ================================================================== *)
+
+(* Seven handler types from Handler_type enum:
+   HT_MESSAGE, HT_FUNCTION, HT_GETPROP, HT_SETPROP,
+   HT_BEFORE, HT_AFTER, HT_PRIVATE *)
+
+handlerDef    ::= messageHandler | functionHandler
+                | getPropHandler | setPropHandler
+                | beforeHandler | afterHandler
+                | privateHandler
+
+messageHandler  ::= "on" identifier [ paramList ] EOL
+                     statementList
+                     "end" identifier EOL
+
+functionHandler ::= "function" identifier [ paramList ] EOL
+                     statementList
+                     "end" identifier EOL
+
+getPropHandler  ::= "getprop" identifier EOL
+                     statementList
+                     "end" identifier EOL
+
+(* setProp may include array key: setProp myProp[pKey] *)
+setPropHandler  ::= "setprop" identifier [ '[' identifier ']' ] identifier EOL
+                     statementList
+                     "end" identifier EOL
+
+beforeHandler   ::= "before" identifier [ paramList ] EOL
+                     statementList
+                     "end" identifier EOL
+
+afterHandler    ::= "after" identifier [ paramList ] EOL
+                     statementList
+                     "end" identifier EOL
+
+privateHandler  ::= "private" ( "on" | "function" | "command" ) identifier [ paramList ] EOL
+                     statementList
+                     "end" identifier EOL
+
+paramList     ::= identifier { ',' identifier }
+                | identifier { identifier }     (* commas optional *)
+
+
+(* ================================================================== *)
+(* Section 4: Declarations                                            *)
+(* ================================================================== *)
+
+declaration   ::= globalDecl | localDecl | constantDecl
+
+globalDecl    ::= "global" varDeclList EOL
+localDecl     ::= "local" varDeclList EOL
+constantDecl  ::= "constant" identifier '=' expression EOL
+
+varDeclList   ::= varDecl { ',' varDecl }
+varDecl       ::= identifier [ '=' expression ]
+
+
+(* ================================================================== *)
+(* Section 5: Statements                                              *)
+(* ================================================================== *)
+
+(* Derived from the Statements enum in parsedef.h: S_ACCEPT through
+   S_WRITE, approximately 140 statement types. Grouped by category. *)
+
+statementList ::= { statement EOL }
+
+statement     ::= controlFlowStmt
+                | dataStmt
+                | ioStmt
+                | objectStmt
+                | navigationStmt
+                | dialogStmt
+                | mediaStmt
+                | miscStmt
+                | declaration
+                | customCommandCall
+
+
+(* ----- 5.1 Control Flow ----- *)
+
+controlFlowStmt ::= ifStmt | switchStmt | repeatStmt
+                   | tryStmt | exitStmt | nextStmt
+                   | passStmt | returnStmt | throwStmt
+                   | breakStmt
+
+(* --- if / then / else --- *)
+(* Four forms supported by the parser:
+   IF_ONELINE:  if cond then stmt [else stmt]
+   IF_SINGLE:   if cond then EOL stmts end if
+   IF_MULTIPLE: if cond then EOL stmts else EOL stmts end if
+   IF_ELSEMULTIPLE: if cond then EOL stmts else if ... end if *)
+
+ifStmt        ::= "if" expression "then" singleLineIf
+                | "if" expression "then" EOL
+                    statementList
+                  { "else" "if" expression "then" EOL
+                    statementList }
+                  [ "else" EOL
+                    statementList ]
+                  "end" "if"
+
+singleLineIf  ::= statement [ "else" statement ]
+
+(* --- switch / case / default --- *)
+switchStmt    ::= "switch" [ expression ] EOL
+                  { caseClause }
+                  [ defaultClause ]
+                  "end" "switch"
+
+caseClause    ::= "case" expression EOL
+                  statementList
+
+defaultClause ::= "default" EOL
+                   statementList
+
+(* --- repeat --- *)
+(* Eight forms from Repeat_form enum:
+   RF_FOREVER, RF_FOR, RF_WITH, RF_STEP, RF_WHILE, RF_UNTIL,
+   RF_EACH, RF_TIMES *)
+
+repeatStmt    ::= "repeat" repeatForm EOL
+                   statementList
+                  "end" "repeat"
+
+repeatForm    ::= (* RF_FOREVER *)  (* empty *)
+                | (* RF_FOR/RF_TIMES *) [ "for" ] expression [ "times" ]
+                | (* RF_WITH *) "with" identifier '=' expression
+                    ( "to" | "down" "to" ) expression [ "step" expression ]
+                | (* RF_WHILE *) "while" expression
+                | (* RF_UNTIL *) "until" expression
+                | (* RF_EACH *) "for" "each" chunkType identifier "in" expression
+                | (* RF_EACH *) "for" "each" "element" identifier "in" expression
+                | (* RF_EACH *) "for" "each" "key" identifier "in" expression
+
+(* --- try / catch / finally --- *)
+tryStmt       ::= "try" EOL
+                   statementList
+                  [ "catch" identifier EOL
+                   statementList ]
+                  [ "finally" EOL
+                   statementList ]
+                  "end" "try"
+
+(* --- exit --- *)
+(* Exit_to enum: ET_ALL, ET_REPEAT, ET_SWITCH, ET_TO *)
+exitStmt      ::= "exit" identifier           (* exit handlerName *)
+                | "exit" "repeat"
+                | "exit" "switch"
+                | "exit" "to" "top"            (* exit to top *)
+
+(* --- next --- *)
+nextStmt      ::= "next" "repeat"
+
+(* --- pass --- *)
+passStmt      ::= "pass" identifier [ "to" "top" ]
+
+(* --- return --- *)
+returnStmt    ::= "return" [ expression ]
+                | "return" expression "for" "error"
+                | "return" expression "for" "value"
+
+(* --- throw --- *)
+throwStmt     ::= "throw" expression
+
+(* --- break --- *)
+breakStmt     ::= "break"
+
+
+(* ----- 5.2 Data Manipulation ----- *)
+
+dataStmt      ::= putStmt | getStmt | setStmt
+                | addStmt | subtractStmt | multiplyStmt | divideStmt
+                | deleteStmt | insertStmt | replaceStmt
+                | combineStmt | splitStmt
+                | sortStmt | filterStmt | convertStmt
+                | unionStmt | intersectStmt | differenceStmt
+
+(* --- put --- *)
+putStmt       ::= "put" expression preposition container
+                | "put" expression                 (* put into "it" *)
+
+(* --- get --- *)
+getStmt       ::= "get" expression                (* result into "it" *)
+
+(* --- set --- *)
+setStmt       ::= "set" [ "the" ] propertyRef "to" expression
+
+(* --- arithmetic mutation --- *)
+addStmt       ::= "add" expression "to" container
+subtractStmt  ::= "subtract" expression "from" container
+multiplyStmt  ::= "multiply" container "by" expression
+divideStmt    ::= "divide" container "by" expression
+
+(* --- delete --- *)
+deleteStmt    ::= "delete" chunkExpr
+                | "delete" objectRef
+                | "delete" "variable" identifier
+
+(* --- insert --- *)
+insertStmt    ::= "insert" "the" "script" "of" objectRef "into"
+                    ( "front" | "back" )
+
+(* --- replace --- *)
+replaceStmt   ::= "replace" expression "with" expression "in" container
+
+(* --- combine / split --- *)
+combineStmt   ::= "combine" container ( "using" | "with" )
+                    expression [ "and" expression ]
+                | "combine" container "by" ( "row" | "column" )
+splitStmt     ::= "split" container ( "using" | "with" | "by" )
+                    expression [ "and" expression ]
+                | "split" container "by" ( "row" | "column" )
+
+(* --- sort --- *)
+(* Sort_type enum: ST_OF, ST_BY, ST_LINES, ST_ITEMS, ST_MARKED,
+   ST_CARDS, ST_TEXT, ST_BINARY, ST_NUMERIC, ST_INTERNATIONAL,
+   ST_DATETIME, ST_ASCENDING, ST_DESCENDING *)
+
+sortStmt      ::= "sort" [ sortTarget ] [ sortDirection ] [ sortType ]
+                    [ "by" expression ]
+
+sortTarget    ::= [ "the" ] chunkType "of" container
+                | container
+                | [ "the" ] "cards" [ "of" "this" "stack" ]
+                | "marked" "cards" [ "of" "this" "stack" ]
+
+sortDirection ::= "ascending" | "descending"
+
+sortType      ::= "text" | "numeric" | "international" | "binary" | "datetime"
+
+(* --- filter --- *)
+(* Match_mode enum: MA_WILDCARD, MA_REGEX, MA_EXPRESSION *)
+filterStmt    ::= "filter" [ chunkType "of" ] container
+                    ( "with" | "without" | "matching" | "not" "matching" )
+                    [ filterMode ] expression
+                  [ "into" container ]
+
+filterMode    ::= "wildcard" "pattern" | "regex" "pattern"
+
+(* --- convert --- *)
+(* Convert_form enum: CF_SHORT, CF_ABBREVIATED, CF_LONG, CF_INTERNET,
+   CF_SECONDS, CF_DATEITEMS, CF_TIME, CF_DATE, etc. *)
+convertStmt   ::= "convert" container
+                    [ "from" dateTimeFormat ] "to" dateTimeFormat
+                    [ "and" dateTimeFormat ]
+
+dateTimeFormat ::= [ dateTimeAdj ] ( "date" | "time" | "seconds"
+                   | "dateitems" | "internet" "date" )
+
+dateTimeAdj   ::= "short" | "abbreviated" | "abbrev" | "abbr"
+                | "long" | "english" | "system"
+
+(* --- set operations --- *)
+unionStmt       ::= "union" container "with" expression [ "recursively" ]
+intersectStmt   ::= "intersect" container "with" expression [ "recursively" ]
+differenceStmt  ::= "difference" container "with" expression
+                   | "symmetric" "difference" container "with" expression
+
+
+(* ----- 5.3 I/O Statements ----- *)
+
+ioStmt        ::= openStmt | closeStmt | readStmt | writeStmt
+                | seekStmt | postStmt | acceptStmt
+
+(* --- open --- *)
+(* Open_argument enum: OA_FILE, OA_DRIVER, OA_PROCESS, OA_SOCKET,
+   OA_PRINTING, OA_OBJECT, OA_DIRECTORY, OA_STDIN, OA_STDOUT, OA_STDERR *)
+openStmt      ::= "open" openTarget
+
+openTarget    ::= "file" expression [ "for" fileMode ]
+                | "driver" expression [ "for" fileMode ]
+                | "process" expression [ "for" fileMode ]
+                | "socket" expression [ "to" expression ]
+                    [ "with" "message" expression ]
+                    [ "with" | "without" "verification" ]
+                | "printing" [ "to" ( "pdf" expression | "printer" ) ]
+
+fileMode      ::= "text" | "binary"
+                | "read" | "write" | "update" | "append"
+
+(* --- close --- *)
+closeStmt     ::= "close" ( "file" | "driver" | "process" | "socket" )
+                    expression
+                | "close" "printing"
+
+(* --- read --- *)
+readStmt      ::= "read" "from" readSource readAmount
+                    [ "in" expression ] [ "with" "message" expression ]
+
+readSource    ::= ( "file" | "driver" | "process" | "socket"
+                  | "stdin" ) expression
+
+readAmount    ::= "for" expression fileUnit
+                | "until" expression
+                | "at" expression "for" expression [ fileUnit ]
+
+fileUnit      ::= "characters" | "chars" | "bytes"
+                | "lines" | "items" | "words"
+                | "int1" | "int2" | "int4" | "int8"
+                | "uint1" | "uint2" | "uint4" | "uint8"
+                | "real4" | "real8"
+
+(* --- write --- *)
+writeStmt     ::= "write" expression "to"
+                    ( "file" | "driver" | "process" | "socket"
+                    | "stdout" | "stderr" ) expression
+                    [ "at" expression ]
+
+(* --- seek --- *)
+seekStmt      ::= "seek" "to" expression "in" "file" expression
+
+(* --- post --- *)
+postStmt      ::= "post" expression "to" "url" expression
+
+(* --- accept --- *)
+(* Accept_constants enum: AC_CONNECTIONS, AC_ON, AC_PORT, AC_DATAGRAM, AC_SECURE *)
+acceptStmt    ::= "accept" ( "connections" | "datagram" [ "s" ] )
+                    "on" "port" expression
+                    [ "with" "message" expression ]
+                    [ "without" "verification" ]
+                    [ "secure" ]
+
+
+(* ----- 5.4 Object Manipulation ----- *)
+
+objectStmt    ::= createStmt | cloneStmt
+                | groupStmt | ungroupStmt
+                | moveStmt | showStmt | hideStmt
+                | enableStmt | disableStmt
+                | lockStmt | unlockStmt
+                | selectStmt | relayerStmt
+                | copyStmt | cutStmt | pasteStmt
+                | grabStmt | placeStmt | removeStmt
+                | resetStmt | saveStmt | loadStmt | unloadStmt
+                | renamStmt | flipStmt | cropStmt
+                | focusStmt | editStmt
+                | hiliteStmt | unhiliteStmt
+
+(* --- create --- *)
+createStmt    ::= "create" [ "invisible" ] objectType [ expression ]
+                    [ "in" objectRef ]
+                | "create" "script" "only" "stack" expression
+                | "create" "directory" expression
+                | "create" "alias" expression [ "to" "file" expression ]
+
+objectType    ::= "stack" | "card" | "group" | "background"
+                | "button" | "field" | "image" | "graphic"
+                | "scrollbar" | "player" | "widget"
+
+(* --- clone --- *)
+cloneStmt     ::= "clone" [ "invisible" ] objectRef
+
+(* --- group / ungroup --- *)
+groupStmt     ::= "group" [ objectRef { "and" objectRef } ]
+ungroupStmt   ::= "ungroup" [ objectRef ]
+
+(* --- move --- *)
+(* Move_mode: MM_MESSAGES, MM_WAITING *)
+moveStmt      ::= "move" objectRef "to" expression
+                    [ "in" expression [ "seconds" | "ticks" | "milliseconds" ] ]
+                    [ "without" ( "messages" | "waiting" ) ]
+                | "move" objectRef "relative" expression
+
+(* --- show / hide --- *)
+(* Show_object enum: SO_ALL, SO_OBJECT, SO_CARD, SO_GROUPS, SO_MARKED,
+   SO_MENU, SO_MESSAGE, SO_PALETTE, SO_TASKBAR, SO_TITLEBAR, SO_WINDOW *)
+showStmt      ::= "show" showTarget [ visualEffect ]
+                | "show" "menubar"
+                | "show" "taskbar"
+                | "show" "groups"
+                | "show" "all" "cards"
+
+hideStmt      ::= "hide" showTarget [ visualEffect ]
+                | "hide" "menubar"
+                | "hide" "taskbar"
+                | "hide" "groups"
+
+showTarget    ::= objectRef | "message" [ "box" ]
+
+(* --- enable / disable --- *)
+enableStmt    ::= "enable" objectRef
+disableStmt   ::= "disable" objectRef
+
+(* --- lock / unlock --- *)
+(* Lock_constants enum: LC_COLORMAP, LC_CURSOR, LC_ERRORS, LC_MENUS,
+   LC_MSGS, LC_MOVES, LC_RECENT, LC_SCREEN, LC_SCREEN_FOR_EFFECT,
+   LC_CLIPBOARD *)
+lockStmt      ::= "lock" lockTarget
+unlockStmt    ::= "unlock" lockTarget [ "with" visualEffect ]
+
+lockTarget    ::= "colormap" | "cursor" | "errors" | "menus"
+                | "messages" | "moves" | "recent" | "screen"
+                | "screen" "for" "visual" "effect"
+                | "clipboard"
+
+(* --- select --- *)
+selectStmt    ::= "select" [ "the" ] ( "text" "of" chunkExpr
+                | chunkExpr
+                | "empty"
+                | objectRef )
+                | "select" "before" chunkExpr
+                | "select" "after" chunkExpr
+
+(* --- relayer --- *)
+(* Relayer_relation: RR_BEFORE, RR_AFTER, RR_FRONT, RR_BACK *)
+relayerStmt   ::= "relayer" objectRef ( "before" | "after" ) objectRef
+                | "relayer" objectRef "to" ( "front" | "back" )
+                    [ "of" objectRef ]
+
+(* --- copy / cut / paste --- *)
+copyStmt      ::= "copy" [ objectRef ] [ "to" objectRef ]
+cutStmt       ::= "cut" [ objectRef ]
+pasteStmt     ::= "paste"
+
+(* --- grab --- *)
+grabStmt      ::= "grab" objectRef
+
+(* --- place / remove --- *)
+placeStmt     ::= "place" objectRef "on" objectRef
+removeStmt    ::= "remove" objectRef "from" objectRef
+                | "remove" "all" "scripts"
+                | "remove" "script" "of" objectRef "from"
+                    ( "front" | "back" )
+
+(* --- reset --- *)
+(* Reset_type enum: RT_CURSORS, RT_PAINT, RT_PRINTING, RT_TEMPLATE_* *)
+resetStmt     ::= "reset" ( "cursors" | "paint" | "printing"
+                | "the" templateObject )
+
+templateObject ::= "templateStack" | "templateCard" | "templateGroup"
+                 | "templateButton" | "templateField" | "templateImage"
+                 | "templateGraphic" | "templateScrollbar" | "templatePlayer"
+                 | "templateAudioClip" | "templateVideoClip"
+                 | "templateEps"
+
+(* --- save --- *)
+saveStmt      ::= "save" objectRef [ "as" expression ]
+                | "save" objectRef "with" ( "newest" "format"
+                                          | "format" expression )
+
+(* --- load / unload --- *)
+loadStmt      ::= "load" [ "url" ] expression [ "with" "message" expression ]
+unloadStmt    ::= "unload" [ "url" ] expression
+
+(* --- rename --- *)
+renamStmt     ::= "rename" ( "file" | "folder" | "directory" ) expression
+                    "to" expression
+
+(* --- flip --- *)
+(* Flip_dir: FL_HORIZONTAL, FL_VERTICAL *)
+flipStmt      ::= "flip" objectRef ( "horizontal" | "vertical" )
+
+(* --- crop --- *)
+cropStmt      ::= "crop" objectRef "to" expression
+
+(* --- focus --- *)
+focusStmt     ::= "focus" [ "on" ] ( "nothing" | objectRef )
+
+(* --- edit --- *)
+editStmt      ::= "edit" [ "the" ] "script" "of" objectRef
+
+(* --- hilite / unhilite --- *)
+hiliteStmt    ::= "hilite" objectRef
+unhiliteStmt  ::= "unhilite" objectRef
+
+
+(* ----- 5.5 Navigation ----- *)
+
+navigationStmt ::= goStmt | pushStmt | popStmt | visualStmt
+
+(* --- go --- *)
+goStmt        ::= "go" [ "to" ] goDestination [ "in" "a" "new" "window" ]
+                    [ visualEffect ]
+
+goDestination ::= cardRef
+                | "url" expression
+                | ( "start" | "home" | "help" | "back" | "forth"
+                  | "first" | "last" | "next" | "previous"
+                  | "recent" ) [ "card" ]
+                | expression   (* stack reference *)
+
+cardRef       ::= "card" ( identifier | expression | ordinal )
+                    [ "of" stackRef ]
+                | "card" "id" expression [ "of" stackRef ]
+
+stackRef      ::= "stack" ( stringLiteral | expression )
+
+(* --- push / pop --- *)
+pushStmt      ::= "push" ( "card" | "recent" "card" | cardRef )
+popStmt       ::= "pop" "card" [ preposition container ]
+
+(* --- visual effect --- *)
+visualStmt    ::= "visual" [ "effect" ] visualEffect
+
+visualEffect  ::= effectName [ effectDirection ] [ effectSpeed ]
+                    [ effectImage ]
+
+effectName    ::= "barn" "door" | "checkerboard" | "dissolve"
+                | "iris" | "push" | "reveal" | "scroll"
+                | "shrink" | "stretch" | "venetian" "blinds"
+                | "wipe" | "zoom" | "plain"
+                | "curl" | "flip"
+
+effectDirection ::= "close" | "open" | "in" | "out"
+                  | "down" | "left" | "right" | "up"
+                  | "bottom" | "center" | "top"
+
+effectSpeed   ::= [ "very" ] ( "fast" | "slow" ) | "normal"
+
+effectImage   ::= "to" ( "black" | "white" | "gray" | "inverse" | "card" )
+
+
+(* ----- 5.6 UI / Dialog ----- *)
+
+dialogStmt    ::= askStmt | answerStmt | chooseStmt
+                | clickStmt | dragStmt | typeStmt
+                | popupStmt | pulldownStmt
+
+(* --- ask --- *)
+(* Ask_type enum: AT_CLEAR, AT_COLOR, AT_EFFECT, AT_ERROR, AT_FILE,
+   AT_FOLDER, AT_INFORMATION, AT_PASSWORD, AT_QUESTION, AT_WARNING,
+   AT_SHEET, AT_HINT, AT_RECORD, etc. *)
+askStmt       ::= "ask" [ askType ] expression
+                    [ "with" expression ]
+                    [ "titled" expression ]
+                    [ "as" "sheet" ]
+
+askType       ::= "question" | "password" [ "clear" ]
+                | "file" [ "with" "filter" expression [ "and" "types" expression ] ]
+                | "folder"
+                | "information" | "warning" | "error"
+                | "color" | "record"
+
+(* --- answer --- *)
+answerStmt    ::= "answer" [ answerType ] expression
+                    [ "with" expression { "or" expression } ]
+                    [ "titled" expression ]
+                    [ "as" "sheet" ]
+
+answerType    ::= "question" | "information" | "warning" | "error"
+                | "file" [ "with" "filter" expression [ "and" "types" expression ] ]
+                | "folder" | "printer" | "page" "setup" | "effect"
+                | "color" | "record"
+
+(* --- choose --- *)
+chooseStmt    ::= "choose" toolName "tool"
+
+toolName      ::= "browse" | "pointer" | "select"
+                | "brush" | "bucket" | "curve" | "dropper" | "eraser"
+                | "lasso" | "line" | "oval" | "pencil"
+                | "polygon" | "rectangle" | "regular" "polygon"
+                | "round" "rect" | "spray" | "text"
+                | "button" | "field" | "graphic" | "image"
+                | "scrollbar" | "player"
+
+(* --- click / drag / type --- *)
+clickStmt     ::= "click" "at" expression [ "with" modifierList ]
+dragStmt      ::= "drag" "from" expression "to" expression
+                    [ "with" modifierList ]
+typeStmt      ::= "type" expression [ "with" modifierList ]
+
+modifierList  ::= modifier { ',' modifier }
+modifier      ::= "commandKey" | "controlKey" | "optionKey"
+                | "shiftKey" | "altKey"
+
+(* --- popup / pulldown --- *)
+popupStmt     ::= "popup" objectRef [ "at" expression ]
+pulldownStmt  ::= "pulldown" objectRef
+
+
+(* ----- 5.7 Media ----- *)
+
+mediaStmt     ::= playStmt | recordStmt | stopStmt | startStmt
+                | prepareStmt
+
+(* --- play --- *)
+(* Play_params enum: PP_AUDIO_CLIP, PP_VIDEO_CLIP, PP_PLAYER,
+   PP_LOOPING, PP_PAUSE, PP_RESUME, PP_STEP, PP_STOP, PP_TEMPO *)
+playStmt      ::= "play" ( "audioclip" | "videoClip" | "video" ) expression
+                    [ "looping" ] [ "tempo" expression ]
+                | "play" objectRef
+                | "play" ( "stop" | "pause" | "resume" | "step"
+                         | "step" "forward" | "step" "back" )
+                | "play" "empty"
+
+(* --- record --- *)
+recordStmt    ::= "record" "sound" expression
+
+(* --- stop --- *)
+stopStmt      ::= "stop" ( "playing" | "moving" | "editing"
+                | "recording" | "using" "font" expression )
+                | "stop" objectRef
+
+(* --- start --- *)
+(* Start_constants: SC_DRAG, SC_EDITING, SC_MOVING, SC_PLAYER,
+   SC_PLAYING, SC_RECORDING, SC_SESSION, SC_USING *)
+startStmt     ::= "start" "using" ( "stack" | objectRef )
+                | "start" "editing" objectRef
+                | "start" "moving" objectRef
+                | "start" "drag"
+                | "start" "session"
+                | "start" "using" "font" expression [ "globally" ]
+                | "start" objectRef
+
+(* --- prepare --- *)
+prepareStmt   ::= "prepare" objectRef
+
+
+(* ----- 5.8 Miscellaneous Statements ----- *)
+
+miscStmt      ::= beepStmt | waitStmt | sendStmt | dispatchStmt
+                | doStmt | callStmt | importStmt | exportStmt
+                | printStmt | findStmt | markStmt | unmarkStmt
+                | quitStmt | launchStmt | killStmt
+                | libraryStmt | encryptStmt | decryptStmt
+                | requestStmt | replyStmt | assertStmt
+                | cancelStmt | compactStmt
+                | modalStmt | modelessStmt | sheetStmt
+                | paletteStmt | topLevelStmt | drawerStmt
+                | resolveStmt | secureStmt | revertStmt
+                | logStmt | rotateStmt | transposeStmt
+                | redoStmt | undoStmt | requireStmt | includeStmt
+                | serverPut | echoStmt
+
+(* --- beep --- *)
+beepStmt      ::= "beep" [ expression ]
+
+(* --- wait --- *)
+waitStmt      ::= "wait" expression [ "seconds" | "ticks" | "milliseconds" ]
+                    [ "with" "messages" ]
+                | "wait" "until" expression [ "with" "messages" ]
+                | "wait" "while" expression [ "with" "messages" ]
+                | "wait" "for" "messages"
+
+(* --- send --- *)
+sendStmt      ::= "send" expression [ "to" objectRef ]
+                    [ "in" expression
+                        [ "seconds" | "ticks" | "milliseconds" ] ]
+
+(* --- dispatch --- *)
+dispatchStmt  ::= "dispatch" expression [ "to" objectRef ]
+                    [ "with" expression { ',' expression } ]
+                | "dispatch" ( "command" | "function" ) expression
+                    [ "to" objectRef ]
+                    [ "with" expression { ',' expression } ]
+
+(* --- do --- *)
+doStmt        ::= "do" expression [ "as" identifier ]
+
+(* --- call --- *)
+callStmt      ::= "call" expression "of" objectRef
+
+(* --- import / export --- *)
+(* Export_format enum: EX_PNG, EX_JPEG, EX_GIF, EX_BMP, EX_PBM, EX_SNAPSHOT, etc. *)
+importStmt    ::= "import" importType expression [ importDest ]
+exportStmt    ::= "export" exportType expression [ "to" expression ]
+
+importType    ::= "snapshot" [ "from" ( "rect" expression | objectRef ) ]
+                | ( "paint" | "audioclip" | "videoClip" | "eps" ) "from" "file"
+
+exportType    ::= "snapshot" [ "from" ( "rect" expression | objectRef ) ]
+                    "to" ( "file" expression "as" imageFormat | "clipboard" )
+                | objectRef "to" "file" expression "as" imageFormat
+                | objectRef "as" imageFormat
+
+imageFormat   ::= "png" | "jpeg" | "gif" | "bmp" | "pbm"
+
+importDest    ::= "to" objectRef | "as" objectType
+
+(* --- print --- *)
+(* Print_mode enum: PM_ALL, PM_BREAK, PM_CARD, PM_MARKED, PM_SOME,
+   PM_ANCHOR, PM_LINK, PM_BOOKMARK, etc. *)
+printStmt     ::= "print" printTarget [ "from" expression "to" expression ]
+                | "print" "anchor" expression
+                | "print" "link" [ "to" ( "url" | "anchor" ) ] expression
+                | "print" "bookmark" expression [ "at" "level" expression ]
+                | "print" "break"
+
+printTarget   ::= expression | "card" | "this" "card"
+                | expression "cards" | "marked" "cards"
+                | "all" "cards"
+
+(* --- find --- *)
+(* Find_mode enum: FM_NORMAL, FM_WHOLE, FM_WORD, FM_CHARACTERS, FM_STRING *)
+findStmt      ::= "find" [ findMode ] expression [ "in" objectRef ]
+
+findMode      ::= "normal" | "whole" | "word" | "characters" | "string"
+                | "chars"
+
+(* --- mark / unmark --- *)
+(* Mark_constants: MC_ALL, MC_BY, MC_CARDS, MC_FINDING, MC_WHERE *)
+markStmt      ::= "mark" ( "all" "cards" | objectRef
+                | "cards" "where" expression
+                | "cards" "by" "finding" [ findMode ] expression
+                    [ "in" objectRef ] )
+
+unmarkStmt    ::= "unmark" ( "all" "cards" | objectRef
+                | "cards" "where" expression
+                | "cards" "by" "finding" [ findMode ] expression
+                    [ "in" objectRef ] )
+
+(* --- quit --- *)
+quitStmt      ::= "quit"
+
+(* --- launch --- *)
+launchStmt    ::= "launch" [ "url" | "document" ] expression
+                    [ "with" expression ]
+
+(* --- kill --- *)
+killStmt      ::= "kill" ( "process" ) expression
+
+(* --- library --- *)
+libraryStmt   ::= "library" "stack" expression
+
+(* --- encrypt / decrypt --- *)
+(* Encryption_constants: ENCRT_BIT, ENCRT_IV, ENCRT_KEY, ENCRT_PASSWORD,
+   ENCRT_SALT, ENCRT_USING, RSA_CERT, RSA_PRIVKEY, RSA_PUBKEY, etc. *)
+encryptStmt   ::= "encrypt" expression "using" expression
+                    [ "with" ( "key" | "password" ) expression ]
+                    [ "and" ( "salt" expression | "iv" expression ) ]
+                    [ "at" expression "bit" ]
+
+decryptStmt   ::= "decrypt" expression "using" expression
+                    [ "with" ( "key" | "password" ) expression ]
+                    [ "and" ( "salt" expression | "iv" expression ) ]
+                    [ "at" expression "bit" ]
+
+(* --- request / reply --- *)
+requestStmt   ::= "request" expression [ "from" expression ]
+                | "request" "appleEvent" expression
+replyStmt     ::= "reply" expression [ "with" "error" expression ]
+
+(* --- assert --- *)
+(* Assert_type: ASSERT_TYPE_TRUE, ASSERT_TYPE_FALSE,
+   ASSERT_TYPE_SUCCESS, ASSERT_TYPE_FAILURE *)
+assertStmt    ::= "assert" [ "that" ]
+                    ( "true" | "false" | "success" | "failure" )
+
+(* --- cancel --- *)
+cancelStmt    ::= "cancel" expression
+
+(* --- compact --- *)
+compactStmt   ::= "compact" objectRef
+
+(* --- window display modes --- *)
+modalStmt     ::= "modal" objectRef
+modelessStmt  ::= "modeless" objectRef
+sheetStmt     ::= "sheet" objectRef
+paletteStmt   ::= "palette" objectRef
+topLevelStmt  ::= "toplevel" objectRef
+drawerStmt    ::= "drawer" objectRef [ "at" expression [ "aligned" expression ] ]
+
+(* --- resolve --- *)
+resolveStmt   ::= "resolve" "image" [ "id" ] expression "relative" "to" objectRef
+
+(* --- secure --- *)
+secureStmt    ::= "secure" "socket" expression
+                    [ "with" | "without" "verification" ]
+                    [ "for" "host" expression ]
+
+(* --- revert --- *)
+revertStmt    ::= "revert" [ objectRef ]
+
+(* --- log --- *)
+logStmt       ::= "log" expression
+
+(* --- rotate --- *)
+rotateStmt    ::= "rotate" objectRef [ "by" expression ]
+
+(* --- transpose --- *)
+transposeStmt ::= "transpose" container
+
+(* --- redo / undo --- *)
+redoStmt      ::= "redo"
+undoStmt      ::= "undo"
+
+(* --- require / include --- *)
+requireStmt   ::= "require" expression
+includeStmt   ::= "include" expression
+
+
+(* ----- 5.9 Custom Command Call ----- *)
+(* Fallback: any identifier followed by arguments is a custom command *)
+
+customCommandCall ::= identifier [ argList ]
+
+argList       ::= expression { ',' expression }
+
+
+(* ================================================================== *)
+(* Section 6: Expressions (Operator Precedence)                       *)
+(* ================================================================== *)
+
+(* Factor_rank enum defines 14 precedence levels from FR_GROUPING
+   to FR_VALUE. Lower rank = lower precedence (binds last).
+   Listed from lowest to highest precedence. *)
+
+expression    ::= orExpr
+
+(* Level 2: FR_OR — logical or *)
+orExpr        ::= andExpr { "or" andExpr }
+
+(* Level 3: FR_AND — logical and *)
+andExpr       ::= bitOrExpr { "and" bitOrExpr }
+
+(* Level 4: FR_OR_BITS — bitwise or *)
+bitOrExpr     ::= bitXorExpr { "bitOr" bitXorExpr }
+
+(* Level 5: FR_XOR_BITS — bitwise xor *)
+bitXorExpr    ::= bitAndExpr { "bitXor" bitAndExpr }
+
+(* Level 6: FR_AND_BITS — bitwise and *)
+bitAndExpr    ::= equalExpr { "bitAnd" equalExpr }
+
+(* Level 7: FR_EQUAL — equality *)
+equalExpr     ::= compExpr { equalOp compExpr }
+equalOp       ::= "=" | "is" | "<>" | "is" "not"
+                | "is" "strictly" expression
+                | "is" "not" "strictly" expression
+
+(* Level 8: FR_COMPARISON — relational *)
+compExpr      ::= concatExpr { compOp concatExpr }
+compOp        ::= "<" | "<=" | ">=" | ">"
+                | "contains" | "begins" "with" | "ends" "with"
+                | "is" "among" isAmongTarget
+                | "is" "not" "among" isAmongTarget
+                | "is" "in" | "is" "not" "in"
+                | "is" "a" typeName | "is" "an" typeName
+                | "is" "not" "a" typeName | "is" "not" "an" typeName
+                | "is" "within" | "is" "not" "within"
+
+isAmongTarget ::= "the" chunkType "of" expression
+                | "the" ( "lines" | "items" | "words" | "keys"
+                        | "characters" | "codepoints" | "codeunits"
+                        | "bytes" | "tokens" | "truewords" ) "of" expression
+
+(* Is_validation types: IV_COLOR, IV_DATE, IV_INTEGER, IV_LOGICAL,
+   IV_NUMBER, IV_POINT, IV_RECT, IV_ARRAY, IV_ASCII,
+   IV_STRING, IV_BINARY_STRING, IV_REAL *)
+typeName      ::= "number" | "integer" | "real" | "logical" | "boolean"
+                | "point" | "rect" | "rectangle"
+                | "date" | "color" | "array"
+                | "ascii" "string" | "string" | "binary" "string"
+
+(* Level 9: FR_CONCAT — concatenation *)
+concatExpr    ::= addExpr { concatOp addExpr }
+concatOp      ::= "&" | "&&"
+
+(* Level 10: FR_ADDSUB — addition/subtraction *)
+addExpr       ::= mulExpr { ( "+" | "-" ) mulExpr }
+
+(* Level 11: FR_MULDIV — multiplication/division/modulo *)
+mulExpr       ::= powExpr { mulOp powExpr }
+mulOp         ::= "*" | "/" | "div" | "mod" | "wrap"
+
+(* Level 12: FR_POW — exponentiation, right-associative *)
+powExpr       ::= unaryExpr [ "^" powExpr ]
+
+(* Level 13: FR_UNARY — unary operators *)
+unaryExpr     ::= [ unaryOp ] postfixExpr
+unaryOp       ::= "-" | "not" | "bitNot"
+
+(* Level 14: FR_VALUE — primary values and postfix operations *)
+postfixExpr   ::= factor { "of" factor }
+
+factor        ::= "(" expression ")"
+                | literal
+                | "it"
+                | "the" "result"
+                | "the" "target"
+                | chunkExpr
+                | functionCall
+                | propertyAccess
+                | objectRef
+                | thereExpr
+                | identifier                (* variable reference *)
+
+(* --- there is / there is no --- *)
+(* There_mode: TM_DIRECTORY, TM_FILE, TM_PROCESS, TM_URL *)
+thereExpr     ::= "there" "is" [ "a" | "an" | "no" ]
+                    ( "file" | "directory" | "folder" | "process"
+                    | "url" ) expression
+
+
+(* ================================================================== *)
+(* Section 7: Chunk Expressions                                       *)
+(* ================================================================== *)
+
+(* 14 chunk types from Chunk_term enum (CT_LINE through CT_KEY):
+   line, paragraph, sentence, item, word, trueword, token,
+   character/char, codepoint, codeunit, byte, element, key *)
+
+chunkExpr     ::= chunkSpec { "of" chunkSpec } "of" container
+                | chunkSpec "of" container
+
+chunkSpec     ::= chunkSelector chunkType
+                | chunkType chunkSelector
+
+chunkSelector ::= expression                        (* single index *)
+                | expression "to" expression         (* range *)
+                | ordinal                            (* first, last, etc. *)
+
+chunkType     ::= "character" | "char" | "characters" | "chars"
+                | "word" | "words"
+                | "trueword" | "truewords"
+                | "token" | "tokens"
+                | "line" | "lines"
+                | "paragraph" | "paragraphs"
+                | "sentence" | "sentences"
+                | "item" | "items"
+                | "byte" | "bytes"
+                | "codeunit" | "codeunits"
+                | "codepoint" | "codepoints"
+                | "element" | "elements"
+                | "key"
+
+(* Ordinals from Chunk_term: CT_FIRST through CT_TENTH, CT_LAST,
+   CT_MIDDLE, CT_ANY, CT_NEXT, CT_PREV *)
+ordinal       ::= "first" | "second" | "third" | "fourth" | "fifth"
+                | "sixth" | "seventh" | "eighth" | "ninth" | "tenth"
+                | "last" | "middle" | "mid" | "any"
+
+container     ::= identifier                    (* variable *)
+                | chunkExpr                      (* nested chunk *)
+                | objectRef                      (* field, button, etc. *)
+                | "url" expression
+                | "it"
+                | "the" "selection"
+                | "the" "clipboard"
+                | "the" "message" [ "box" ]
+                | "the" "templateField"
+                | "the" "dragData" [ '[' expression ']' ]
+                | "the" "clipboardData" [ '[' expression ']' ]
+
+
+(* ================================================================== *)
+(* Section 8: Object References                                       *)
+(* ================================================================== *)
+
+(* Object types from Chunk_term / Dest_type enums.
+   CT_BUTTON, CT_FIELD, CT_IMAGE, CT_GRAPHIC, CT_GROUP,
+   CT_CARD, CT_STACK, CT_PLAYER, CT_SCROLLBAR, CT_WIDGET,
+   CT_AUDIO_CLIP, CT_VIDEO_CLIP, CT_BACKGROUND, CT_EPS, CT_MENU *)
+
+objectRef     ::= objectAddress { "of" objectAddress }
+
+objectAddress ::= controlRef | cardAddress | stackAddress | specialRef
+
+controlRef    ::= controlType ( expression | ordinal | "id" expression )
+
+controlType   ::= "button" | "btn"
+                | "field" | "fld"
+                | "image" | "img"
+                | "graphic" | "grc"
+                | "group" | "grp"
+                | "player"
+                | "scrollbar"
+                | "widget"
+                | "audioclip" | "audio" "clip"
+                | "videoclip" | "video" "clip"
+                | "eps"
+                | "control"
+                | "menu"
+                | "background" | "bg" | "bkgnd"
+
+cardAddress   ::= ( "card" | "cd" ) ( expression | ordinal | "id" expression )
+                | ( "this" | "recent" | "next" | "previous" | "prev" ) "card"
+                | "marked" "card" expression
+
+stackAddress  ::= "stack" ( expression | "id" expression )
+                | ( "this" | "the" "topStack" | "the" "defaultStack" ) "stack"
+
+specialRef    ::= "me"
+                | "the" "target"
+                | "the" "owner" "of" objectRef
+                | "the" "selectedObject"
+                | "the" "clickField"
+                | "the" "clickStack"
+                | "the" "mouseControl"
+                | "the" "mouseStack"
+                | "the" "topStack"
+                | "the" "defaultStack"
+                | "the" "dragDestination"
+                | "the" "dragSource"
+                | "the" "focusedObject"
+                | "this" "me"
+
+
+(* ================================================================== *)
+(* Section 9: Property Access                                         *)
+(* ================================================================== *)
+
+(* Properties are accessed with "the" keyword. The effective keyword
+   returns the inherited/computed value. Array properties use bracket
+   notation. *)
+
+propertyAccess ::= "the" [ "effective" ] propertyName
+                    [ "of" ( objectRef | chunkExpr ) ]
+                 | "the" [ "effective" ] [ propertyAdj ] propertyName
+                    [ "of" ( objectRef | chunkExpr ) ]
+
+propertyRef    ::= [ "the" ] propertyName [ '[' expression ']' ]
+                    [ "of" ( objectRef | chunkExpr ) ]
+
+propertyAdj    ::= "short" | "abbreviated" | "abbrev" | "abbr" | "long"
+
+(* propertyName is any of the hundreds of property identifiers from
+   the Properties enum: P_NAME, P_ID, P_VISIBLE, P_LOCATION, P_TEXT,
+   P_SCRIPT, P_WIDTH, P_HEIGHT, P_RECTANGLE, etc.
+   Also includes custom property names (any identifier). *)
+
+propertyName   ::= identifier
+
+
+(* ================================================================== *)
+(* Section 10: Function Calls                                         *)
+(* ================================================================== *)
+
+(* Two forms: C-style parenthesized, and "the" form *)
+
+functionCall  ::= identifier "(" [ expression { ',' expression } ] ")"
+                | "the" functionName [ "of" expression ]
+
+(* Built-in functions from Functions enum: F_ABS through F_WORD_OFFSET,
+   approximately 200 built-in functions. Common ones listed below. *)
+
+functionName  ::= identifier
+
+(* Examples of built-in functions (from Functions enum):
+   Math: abs, acos, asin, atan, atan2, cos, sin, tan, exp, ln, log2,
+         log10, sqrt, round, trunc, floor, ceil, min, max, sum,
+         random, annuity, compound, statRound
+   String: length, offset, charToNum, numToChar, toLower, toUpper,
+           replaceText, matchText, matchChunk, format, merge,
+           base64Decode, base64Encode, urlDecode, urlEncode,
+           binaryDecode, binaryEncode, md5Digest, sha1Digest,
+           compress, decompress
+   Date/Time: date, time, seconds, millisecs, ticks, dateFormat
+   System: platform, machine, environment, systemVersion, processor,
+           version, buildNumber, commandName, commandArguments
+   Files: files, directories, specialFolderPath, longFilePath,
+          shortFilePath, tempName, diskSpace
+   UI: mouse, mouseLoc, mouseClick, mouseH, mouseV, mouseStack,
+       mouseControl, clickLoc, clickH, clickV, clickStack,
+       clickField, clickChar, clickChunk, clickLine, clickText,
+       selectedText, selectedChunk, selectedField, selectedLine,
+       selectedObject, selectedLoc, focusedObject,
+       foundText, foundChunk, foundField, foundLine, foundLoc
+   Stack/Object: exists, keys, extents, number, target, owner,
+                 topStack, mainStacks, openStacks, stacks, windows,
+                 menus, result, param, paramCount, params, value,
+                 within, frontScripts, backScripts, functionNames,
+                 commandNames, globalNames, variableNames
+   Statistics: average, averageDeviation, geometricMean, harmonicMean,
+               median, populationStdDev, populationVariance,
+               sampleStdDev, sampleVariance
+   Misc: shell, uuid, randomBytes, matrixMultiply, vectorDotProduct,
+         transpose, baseConvert, isNumber, measureText,
+         normalizeText, codepointProperty, arrayEncode, arrayDecode *)
+
+
+(* ================================================================== *)
+(* Section 11: Prepositions                                           *)
+(* ================================================================== *)
+
+(* Preposition_type enum: PT_AFTER, PT_AS, PT_AT, PT_BEFORE, PT_FROM,
+   PT_IN, PT_INTO, PT_OF, PT_ON, PT_RELATIVE, PT_TO, PT_WITHOUT,
+   PT_BY, PT_ALIGNED *)
+
+preposition   ::= "into" | "after" | "before"
+                | "to" | "from" | "in" | "at"
+                | "of" | "on" | "by"
+                | "as" | "with" | "without"
+                | "relative"
+
+
+(* ================================================================== *)
+(* Section 12: Server-Mode Extensions                                 *)
+(* ================================================================== *)
+
+(* Server_keywords: SK_HEADER, SK_CONTENT, SK_MARKUP, SK_NEW,
+   SK_UNICODE, SK_SECURE, SK_HTTPONLY *)
+
+(* Server mode adds: <?lc ... ?> processing instruction blocks,
+   put ... with header, put ... with new header, put ... with content,
+   echo statement, cookie setting. These apply only to server engine. *)
+
+serverPut     ::= "put" ( "header" | "new" "header" | "content"
+                | "markup" | "binary" ) expression
+                | "put" "cookie" expression
+
+echoStmt      ::= "echo" expression
+
+
+(* ================================================================== *)
+(* END OF GRAMMAR                                                     *)
+(* ================================================================== *)
